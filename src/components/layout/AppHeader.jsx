@@ -1,6 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import clsx from 'clsx'
-import { PencilRuler } from 'lucide-react'
 
 const NAV_ITEMS = [
   { label: 'Submit Request', to: '/submit' },
@@ -14,9 +13,8 @@ export default function AppHeader() {
     <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/85 backdrop-blur">
       <div className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
         <div className="flex items-center gap-2.5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-dark text-white">
-            <PencilRuler className="h-4 w-4" />
-          </span>
+          <img src="/zopper-logo.png" alt="Zopper" className="h-7 w-auto" />
+          <span className="h-5 w-px bg-slate-200" />
           <span className="font-heading text-[15px] font-bold uppercase tracking-wide text-brand-dark sm:text-base">
             Design Request Tool
           </span>
