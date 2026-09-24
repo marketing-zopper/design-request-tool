@@ -33,7 +33,7 @@ export default function RequestTable({ requests, onSelect }) {
               >
                 <td className="px-4 py-3.5 font-heading font-semibold text-brand-dark">{request.request_code}</td>
                 <td className="max-w-[180px] truncate px-4 py-3.5">{requirementLabel(request)}</td>
-                <td className="px-4 py-3.5">{request.requesterName}</td>
+                <td className="px-4 py-3.5">{request.requesterEmail}</td>
                 <td className="px-4 py-3.5">{request.team}</td>
                 <td className="max-w-[140px] truncate px-4 py-3.5">{request.stakeholderName}</td>
                 <td className="px-4 py-3.5">{formatDate(request.deadline)}</td>
@@ -65,7 +65,7 @@ export default function RequestTable({ requests, onSelect }) {
             <p className="text-sm font-body font-medium text-slate-700">{requirementLabel(request)}</p>
             <div className="flex items-center justify-between text-[12px] font-body text-slate-400">
               <span>
-                {request.requesterName} · {request.team}
+                {request.requesterEmail} · {request.team}
               </span>
               <span>Due {formatDate(request.deadline)}</span>
             </div>

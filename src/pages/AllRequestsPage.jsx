@@ -56,7 +56,7 @@ export default function AllRequestsPage() {
       if (!query) return true
       return (
         r.request_code?.toLowerCase().includes(query) ||
-        r.requesterName?.toLowerCase().includes(query) ||
+        r.requesterEmail?.toLowerCase().includes(query) ||
         r.design_type?.toLowerCase().includes(query)
       )
     })

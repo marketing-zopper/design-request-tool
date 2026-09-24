@@ -27,7 +27,6 @@ export function makeEmptyRequirement() {
 }
 
 const EMPTY_REQUESTER = {
-  requesterName: '',
   team: '',
   requesterEmail: '',
   stakeholderId: '',

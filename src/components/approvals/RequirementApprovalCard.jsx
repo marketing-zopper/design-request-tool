@@ -67,7 +67,7 @@ export default function RequirementApprovalCard({ request, onView, onResolved })
         <>
           <p>
             <span className="text-slate-400">By </span>
-            {request.requesterName}
+            {request.requesterEmail}
           </p>
           <p>
             <span className="text-slate-400">Team </span>

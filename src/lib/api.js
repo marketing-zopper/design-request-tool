@@ -21,7 +21,6 @@ const REQUEST_LIST_SELECT = `
   created_at,
   updated_at,
   request_batches (
-    requester_name,
     requester_email,
     team,
     stakeholder_id,
@@ -37,7 +36,6 @@ function flattenRequest(row) {
   const stakeholderEmail = batch?.stakeholders?.email || batch?.custom_stakeholder_email || null
   return {
     ...row,
-    requesterName: batch?.requester_name,
     requesterEmail: batch?.requester_email,
     team: batch?.team,
     stakeholderName,
@@ -121,7 +119,6 @@ export async function submitDesignRequestBatch({ requester, requirements, onProg
   const { data: batch, error: batchError } = await supabase
     .from('request_batches')
     .insert({
-      requester_name: requester.requesterName,
       requester_email: requester.requesterEmail,
       team: requester.team,
       stakeholder_id: stakeholderId,

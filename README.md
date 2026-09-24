@@ -35,6 +35,8 @@ with no login required.
    - `0007_daily_digest_cron.sql` — schedules the daily approval-digest email (see "Daily approval digest" below —
      **read that section before running this one**, it depends on a secret you create manually first)
    - `0008_stakeholders_update.sql` — lets stakeholders be deactivated (soft-delete via `active = false`)
+   - `0009_requester_name_optional.sql` — the submit form no longer collects the requester's name, so this drops
+     the `NOT NULL` constraint on `request_batches.requester_name` (the column stays, just unused going forward)
 
    (If you have the Supabase CLI linked to the project, `supabase db push` will apply
    all files in `supabase/migrations/` for you — except 0007 still needs the manual

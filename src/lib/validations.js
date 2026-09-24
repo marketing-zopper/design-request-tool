@@ -2,7 +2,6 @@ import { z } from 'zod'
 
 export const requesterSchema = z
   .object({
-    requesterName: z.string().trim().min(2, 'Enter your full name'),
     team: z.string().trim().min(1, 'Select your team'),
     requesterEmail: z.string().trim().email('Enter a valid work email'),
     stakeholderId: z.string().min(1, 'Select a stakeholder'),

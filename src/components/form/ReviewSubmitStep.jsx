@@ -48,7 +48,7 @@ export default function ReviewSubmitStep({ draft, onBack, onEditRequirement, onS
       <div className="rounded-xl border border-slate-200 bg-[#F6F8FC] p-4">
         <p className="text-[11px] font-body uppercase tracking-wide text-slate-400">Requested By</p>
         <p className="mt-0.5 font-body text-sm text-slate-700">
-          {requester.requesterName} · {requester.team} · {requester.requesterEmail}
+          {requester.team} · {requester.requesterEmail}
         </p>
         <p className="mt-3 text-[11px] font-body uppercase tracking-wide text-slate-400">Approver</p>
         <p className="mt-0.5 font-body text-sm text-slate-700">

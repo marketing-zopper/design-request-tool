@@ -66,7 +66,7 @@ export default function DesignApprovalCard({ request, latestDesign, onView, onRe
         <>
           <p>
             <span className="text-slate-400">By </span>
-            {request.requesterName}
+            {request.requesterEmail}
           </p>
           <p>
             <span className="text-slate-400">Deadline </span>

@@ -39,10 +39,6 @@ export default function RequesterDetailsStep({ defaultValues, onContinue }) {
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-5">
-      <FormField label="Your Name" required error={errors.requesterName?.message}>
-        <input className={inputBaseClass} placeholder="Enter your full name" {...register('requesterName')} />
-      </FormField>
-
       <div className="grid gap-4 sm:grid-cols-2">
         <FormField label="Team / Department" required error={errors.team?.message}>
           <SelectField placeholder="Select your team" {...register('team')}>

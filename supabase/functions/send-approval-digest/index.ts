@@ -26,7 +26,7 @@ const DIGEST_INVOKE_SECRET = Deno.env.get('DIGEST_INVOKE_SECRET')!
 const BATCH_SELECT = `
   id, request_code, design_type, custom_design_type, quantity, deadline,
   request_batches (
-    requester_name,
+    requester_email,
     stakeholder_id,
     stakeholders ( id, name, email, access_token )
   )
@@ -46,7 +46,7 @@ function renderDigestHtml(stakeholderName: string, requirementItems: any[], desi
     `<tr>
       <td style="padding:8px 12px;border-bottom:1px solid #eef1f6;font-family:sans-serif;font-size:13px;color:#1F4091;font-weight:600;">${r.request_code}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #eef1f6;font-family:sans-serif;font-size:13px;color:#334155;">${designTypeLabel(r)}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #eef1f6;font-family:sans-serif;font-size:13px;color:#334155;">${r.request_batches?.requester_name ?? ''}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eef1f6;font-family:sans-serif;font-size:13px;color:#334155;">${r.request_batches?.requester_email ?? ''}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #eef1f6;font-family:sans-serif;font-size:13px;color:#64748b;">${formatDate(r.deadline)}</td>
     </tr>`
 

@@ -11,7 +11,7 @@ export default function RequestFiltersBar({ search, onSearchChange, filters, onF
         <input
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search by request ID, requester or design type"
+          placeholder="Search by request ID, requester email or design type"
           className={`${inputBaseClass} pl-9`}
         />
       </div>

@@ -138,11 +138,7 @@ export default function RequestDetailDrawer({ requestId, onClose, onChanged }) {
                   {detail.design_type === 'Other' ? detail.custom_design_type : detail.design_type}
                 </DetailRow>
                 <DetailRow label="Requester">
-                  {detail.requesterName}
-                  <br />
-                  <span className="text-slate-400">
-                    {detail.team} · {detail.requesterEmail}
-                  </span>
+                  {detail.team} · {detail.requesterEmail}
                 </DetailRow>
                 <DetailRow label="Stakeholder">
                   {detail.stakeholderName}
