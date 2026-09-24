@@ -124,7 +124,7 @@ const SelectField = forwardRef(function SelectField(
       </button>
 
       {open && (
-        <ul className="scroll-thin absolute z-30 mt-1.5 max-h-[220px] w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-pop">
+        <ul className="scroll-thin absolute z-30 mt-1.5 max-h-[116px] w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-pop">
           {options.map((opt) => (
             <li key={opt.value}>
               <button
