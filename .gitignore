@@ -1,0 +1,19 @@
+node_modules
+dist
+dist-ssr
+*.local
+
+.env
+.env.local
+
+.DS_Store
+Thumbs.db
+
+*.log
+npm-debug.log*
+
+.vscode/*
+!.vscode/extensions.json
+
+# Supabase CLI local cache/state (not part of the project itself)
+supabase/.temp
