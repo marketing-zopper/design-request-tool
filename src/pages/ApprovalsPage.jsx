@@ -7,8 +7,14 @@ import LoadingState from '../components/ui/LoadingState'
 import ErrorState from '../components/ui/ErrorState'
 import RequirementApprovalCard from '../components/approvals/RequirementApprovalCard'
 import DesignApprovalCard from '../components/approvals/DesignApprovalCard'
+import CompletedRequestCard from '../components/approvals/CompletedRequestCard'
 import RequestDetailDrawer from '../components/requests/RequestDetailDrawer'
-import { fetchPendingRequirementApprovals, fetchDesignApprovals, fetchFinalDesignAttachments } from '../lib/api'
+import {
+  fetchPendingRequirementApprovals,
+  fetchDesignApprovals,
+  fetchCompletedApprovals,
+  fetchFinalDesignAttachments,
+} from '../lib/api'
 import { useStakeholderAccess } from '../hooks/useStakeholderAccess'
 
 export default function ApprovalsPage() {
@@ -16,6 +22,7 @@ export default function ApprovalsPage() {
 
   const [requirementApprovals, setRequirementApprovals] = useState([])
   const [designApprovals, setDesignApprovals] = useState([])
+  const [completedApprovals, setCompletedApprovals] = useState([])
   const [finalDesignsByRequest, setFinalDesignsByRequest] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -24,11 +31,15 @@ export default function ApprovalsPage() {
   const load = () => {
     setLoading(true)
     setError(null)
-    Promise.all([fetchPendingRequirementApprovals(), fetchDesignApprovals()])
-      .then(async ([reqApprovals, designApprovalsList]) => {
+    Promise.all([fetchPendingRequirementApprovals(), fetchDesignApprovals(), fetchCompletedApprovals()])
+      .then(async ([reqApprovals, designApprovalsList, completedList]) => {
         setRequirementApprovals(reqApprovals)
         setDesignApprovals(designApprovalsList)
-        const attachmentsByRequest = await fetchFinalDesignAttachments(designApprovalsList.map((r) => r.id))
+        setCompletedApprovals(completedList)
+        const attachmentsByRequest = await fetchFinalDesignAttachments([
+          ...designApprovalsList.map((r) => r.id),
+          ...completedList.map((r) => r.id),
+        ])
         setFinalDesignsByRequest(attachmentsByRequest)
       })
       .catch(setError)
@@ -42,6 +53,7 @@ export default function ApprovalsPage() {
 
   const scopedRequirementApprovals = requirementApprovals.filter((r) => r.stakeholderId === stakeholder?.id)
   const scopedDesignApprovals = designApprovals.filter((r) => r.stakeholderId === stakeholder?.id)
+  const scopedCompletedApprovals = completedApprovals.filter((r) => r.stakeholderId === stakeholder?.id)
   const nothingPending = scopedRequirementApprovals.length === 0 && scopedDesignApprovals.length === 0
 
   return (
@@ -113,6 +125,21 @@ export default function ApprovalsPage() {
                         latestDesign={finalDesignsByRequest[request.id]?.[0]}
                         onView={() => setSelectedId(request.id)}
                         onResolved={load}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {scopedCompletedApprovals.length > 0 && (
+                <section>
+                  <h2 className="font-heading text-lg font-semibold text-slate-700">Completed</h2>
+                  <div className="mt-3 flex flex-col gap-3">
+                    {scopedCompletedApprovals.map((request) => (
+                      <CompletedRequestCard
+                        key={request.id}
+                        request={request}
+                        finalDesignAttachments={finalDesignsByRequest[request.id] || []}
                       />
                     ))}
                   </div>

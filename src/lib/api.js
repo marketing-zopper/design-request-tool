@@ -293,6 +293,21 @@ export async function fetchDesignApprovals() {
   return data.map(flattenRequest)
 }
 
+/**
+ * Requests whose final design has been approved. Shown on the Approvals page
+ * so a stakeholder can come back and re-download a design after approving it
+ * — otherwise it just disappears from their view once approved.
+ */
+export async function fetchCompletedApprovals() {
+  const { data, error } = await supabase
+    .from('design_requests')
+    .select(REQUEST_LIST_SELECT)
+    .eq('status', STATUS.COMPLETED)
+    .order('updated_at', { ascending: false })
+  if (error) throw error
+  return data.map(flattenRequest)
+}
+
 export async function fetchFinalDesignAttachments(requestIds) {
   if (!requestIds.length) return {}
   const { data, error } = await supabase

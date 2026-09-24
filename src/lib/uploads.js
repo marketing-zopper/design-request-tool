@@ -45,3 +45,15 @@ export function getPublicUrl(path) {
   const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path)
   return data.publicUrl
 }
+
+/**
+ * A plain `<a href=publicUrl download>` doesn't reliably force a download —
+ * Supabase Storage URLs are a different origin than the app, and browsers
+ * ignore the `download` attribute cross-origin. Supabase's storage API
+ * supports a `download` option that makes it respond with
+ * `Content-Disposition: attachment`, which works regardless of origin.
+ */
+export function getDownloadUrl(path, filename) {
+  const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path, { download: filename || true })
+  return data.publicUrl
+}

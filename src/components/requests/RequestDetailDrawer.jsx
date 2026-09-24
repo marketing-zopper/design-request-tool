@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import { X, Paperclip, ExternalLink, Trash2 } from 'lucide-react'
 import StatusBadge from '../ui/StatusBadge'
 import StatusUpdatePanel from './StatusUpdatePanel'
+import FinalDesignDownloadList from './FinalDesignDownloadList'
 import LoadingState from '../ui/LoadingState'
 import ErrorState from '../ui/ErrorState'
 import ConfirmationModal from '../ui/ConfirmationModal'
@@ -196,7 +197,7 @@ export default function RequestDetailDrawer({ requestId, onClose, onChanged }) {
               <div className="rounded-xl border border-slate-200 bg-[#F6F8FC] p-4">
                 <p className="text-[11px] font-body font-semibold uppercase tracking-wide text-slate-400">Final Design</p>
                 <div className="mt-2">
-                  <AttachmentList title="" attachments={finalDesigns} />
+                  <FinalDesignDownloadList attachments={finalDesigns} />
                 </div>
                 <div className="mt-3">
                   <StatusUpdatePanel
