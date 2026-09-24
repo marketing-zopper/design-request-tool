@@ -16,7 +16,7 @@ create extension if not exists pg_net;
 
 select cron.schedule(
   'daily-approval-digest',
-  '0 9 * * *', -- 9:00 UTC daily — adjust to suit your stakeholders' timezone
+  '30 7 * * *', -- 7:30 UTC daily — adjust to suit your stakeholders' timezone
   $$
   select net.http_post(
     url := 'https://nbgqzqdvaflmjsmvfqkw.supabase.co/functions/v1/send-approval-digest',
@@ -30,6 +30,6 @@ select cron.schedule(
 );
 
 -- To change the schedule later:
---   select cron.alter_job((select jobid from cron.job where jobname = 'daily-approval-digest'), schedule := '0 9 * * *');
+--   select cron.alter_job((select jobid from cron.job where jobname = 'daily-approval-digest'), schedule := '30 7 * * *');
 -- To stop it:
 --   select cron.unschedule('daily-approval-digest');

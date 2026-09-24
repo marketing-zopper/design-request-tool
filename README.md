@@ -34,6 +34,7 @@ with no login required.
    - `0006_stakeholder_tokens.sql` — per-stakeholder magic-link tokens for the Approvals page (see below)
    - `0007_daily_digest_cron.sql` — schedules the daily approval-digest email (see "Daily approval digest" below —
      **read that section before running this one**, it depends on a secret you create manually first)
+   - `0008_stakeholders_update.sql` — lets stakeholders be deactivated (soft-delete via `active = false`)
 
    (If you have the Supabase CLI linked to the project, `supabase db push` will apply
    all files in `supabase/migrations/` for you — except 0007 still needs the manual
@@ -83,15 +84,18 @@ src/
     layout/      AppHeader, PageContainer, ManageRequestsTabs, BackgroundShapes
     form/        Submit-request steps: requester details, requirement form/list,
                  file uploader, review cards, success screen
-    requests/    All Requests table/filters, detail drawer, design-team status panel
+    requests/    All Requests table/filters, detail drawer, design-team status panel,
+                 TeamLoginGate (the /requests allowlist+password gate)
     approvals/   Requirement & design approval cards
     ui/          Button, FormField, SelectField, StatusBadge, EmptyState,
                  LoadingState, ErrorState, ConfirmationModal, Stepper
   pages/         SubmitRequestPage, AllRequestsPage, ApprovalsPage
   lib/           supabase client, constants, zod validations, request-code
-                 helpers, upload helpers, api.js (all Supabase queries/mutations)
+                 helpers, upload helpers, api.js (all Supabase queries/mutations),
+                 teamAccess.js (the /requests allowlist + shared password)
   hooks/         useStakeholders, useDraftForm (session-persisted submit form),
-                 useStakeholderAccess (token-gated Approvals access)
+                 useStakeholderAccess (token-gated Approvals access),
+                 useTeamAccess (allowlist+password gate for All Requests)
 supabase/
   migrations/    SQL migrations described above
   functions/
@@ -205,8 +209,10 @@ auth — is what decides what the anon key can do. RLS is **enabled on every
 table** (never disabled), with narrow policies (see `0002_rls.sql`) that only
 allow the operations the app actually performs:
 
-- `stakeholders`: readable (name/email/active only — `access_token` is never selectable, see below) + insertable
-  (submitting as "Other" upserts a stakeholder row).
+- `stakeholders`: readable (name/email/active only — `access_token` is never selectable, see below), insertable
+  (submitting as "Other" upserts a stakeholder row), and updatable (`0008_stakeholders_update.sql` — deactivating
+  one via `active = false` instead of deleting, since a hard delete would fail on any stakeholder ever referenced
+  by a submission).
 - `request_batches`: insert (on submit) + read. Never updated or deleted.
 - `design_requests`: insert (on submit), read, update (status changes), and delete
   (`0005_allow_request_delete.sql` — the design team can remove a request entirely).
@@ -225,20 +231,21 @@ without going through the UI, **as long as they can reach the right row**.
 That's an acceptable trade-off for an internal tool used by a small trusted
 team, but it is **not** a substitute for real authorization.
 
-**The one exception is `/approvals`.** Submitting and managing requests (`/submit`,
-`/requests`) stay fully open by design — anyone on the team can do those.
-Approvals are different: only someone holding a stakeholder's personal
-`?token=...` link (delivered privately by the daily digest email, see above)
-can see or act on that stakeholder's approvals. This is *link possession*, not
-authentication — there's no password, and no check that the person clicking
-the link is really that stakeholder. It stops casual/accidental access (you
-can't just browse to `/approvals` and see everything, like every other
-no-auth screen in this app), but it does **not** stop someone who has a valid
-token from acting as that stakeholder, and the RLS layer underneath still
-grants the anon key full read/write on `approvals`/`design_requests` — the
-token check happens entirely in the React app, not in Postgres. A determined
-user with the anon key could still bypass the UI and call the same REST
-endpoints directly. Real authorization still requires Supabase Auth (see below).
+**Two screens have an extra gate on top of this; everything else (`/submit`) stays fully open.**
+
+- **`/requests` (All Requests)** is restricted to the marketing team: a fixed allowlist of 5 emails plus one
+  shared password (see `src/lib/teamAccess.js`). Whoever logs in stays logged in (in `localStorage`) until they
+  hit "Log out". This is a soft barrier, nothing more — the email list and password both ship in the JS bundle,
+  the check runs entirely in React, and the anon key underneath still has full read/write on every table regardless
+  of whether someone's "logged in". It stops a random visitor from stumbling into the request-management UI; it
+  does not stop someone who reads the bundle from bypassing it entirely.
+- **`/approvals`** only shows content to someone holding a stakeholder's personal `?token=...` link (delivered
+  privately by the daily digest email, see above). This is *link possession*, not authentication — there's no
+  password, and no check that the person clicking the link is really that stakeholder.
+
+Both checks stop casual/accidental access (you can't just browse to either page and see everything, unlike a
+truly open no-auth screen), but neither stops a determined user with the anon key from bypassing the UI and
+calling the same REST endpoints directly. Real authorization still requires Supabase Auth (see below).
 
 **Where to introduce auth later:** add Supabase Auth (email/SSO), then:
 
@@ -258,7 +265,8 @@ open and why.
 
 ## Known limitations (by design, for V1)
 
-- No authentication, roles, or permissions — `/approvals` has link-based gating (see above), everything else is open.
+- No authentication, roles, or permissions — `/requests` has an allowlist+password gate and `/approvals` has
+  link-based gating (see above), `/submit` is fully open.
 - Submission isn't atomic across tables/storage (see "Storage layout" above).
 - No kanban, task assignment, or analytics — out of scope per the V1 brief.
 - Design requests created before `0006_stakeholder_tokens.sql`, with an "Other" stakeholder, aren't linked to a
