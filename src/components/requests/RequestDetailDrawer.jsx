@@ -10,7 +10,7 @@ import ErrorState from '../ui/ErrorState'
 import ConfirmationModal from '../ui/ConfirmationModal'
 import { fetchRequestById, deleteDesignRequest } from '../../lib/api'
 import { getErrorMessage } from '../../lib/errors'
-import { formatDate, formatDateTime, formatFileSize } from '../../lib/format'
+import { formatDate, formatDateTime } from '../../lib/format'
 import { APPROVAL_STATUS } from '../../lib/constants'
 
 function DetailRow({ label, children }) {
@@ -55,7 +55,7 @@ const APPROVAL_STATUS_TEXT = {
   [APPROVAL_STATUS.CHANGES_REQUESTED]: 'Changes Requested',
 }
 
-export default function RequestDetailDrawer({ requestId, onClose, onChanged }) {
+export default function RequestDetailDrawer({ requestId, onClose, onChanged, allowManageActions = true }) {
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -113,7 +113,7 @@ export default function RequestDetailDrawer({ requestId, onClose, onChanged }) {
             {detail && <StatusBadge status={detail.status} />}
           </div>
           <div className="flex items-center gap-1">
-            {detail && (
+            {allowManageActions && detail && (
               <button
                 onClick={() => setShowDeleteConfirm(true)}
                 className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-rose-50 hover:text-rose-500"
@@ -199,16 +199,18 @@ export default function RequestDetailDrawer({ requestId, onClose, onChanged }) {
                 <div className="mt-2">
                   <FinalDesignDownloadList attachments={finalDesigns} />
                 </div>
-                <div className="mt-3">
-                  <StatusUpdatePanel
-                    request={detail}
-                    finalDesignAttachments={finalDesigns}
-                    onUpdated={() => {
-                      load()
-                      onChanged?.()
-                    }}
-                  />
-                </div>
+                {allowManageActions && (
+                  <div className="mt-3">
+                    <StatusUpdatePanel
+                      request={detail}
+                      finalDesignAttachments={finalDesigns}
+                      onUpdated={() => {
+                        load()
+                        onChanged?.()
+                      }}
+                    />
+                  </div>
+                )}
               </div>
 
               {detail.approvals?.length > 0 && (
@@ -225,7 +227,7 @@ export default function RequestDetailDrawer({ requestId, onClose, onChanged }) {
                           </span>
                           <span className="text-slate-400">{APPROVAL_STATUS_TEXT[a.status]}</span>
                         </div>
-                        {a.comment && <p className="mt-1 text-slate-500">"{a.comment}"</p>}
+                        {a.comment && <p className="mt-1 text-slate-500">&ldquo;{a.comment}&rdquo;</p>}
                         <p className="mt-1 text-slate-300">{formatDateTime(a.updated_at)}</p>
                       </li>
                     ))}

@@ -64,10 +64,14 @@ export async function fetchStakeholders() {
  * receiving the daily approval digest like any listed stakeholder.
  */
 async function findOrCreateStakeholder(name, email) {
+  // Escape SQL LIKE wildcards (_ and %) — emails routinely contain underscores,
+  // which `ilike` would otherwise treat as "match any single character" and
+  // could match the wrong stakeholder (or multiple, throwing via maybeSingle()).
+  const escapedEmail = email.replace(/[%_\\]/g, '\\$&')
   const { data: existing, error: findError } = await supabase
     .from('stakeholders')
     .select('id, name, email')
-    .ilike('email', email)
+    .ilike('email', escapedEmail)
     .maybeSingle()
   if (findError) throw findError
   if (existing) return existing

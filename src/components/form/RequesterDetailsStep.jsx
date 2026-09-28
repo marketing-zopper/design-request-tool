@@ -74,7 +74,7 @@ export default function RequesterDetailsStep({ defaultValues, onContinue }) {
           </SelectField>
           {stakeholdersError && (
             <p className="text-[11px] font-body text-amber-600">
-              Couldn't load the stakeholder list — choose "Other" and enter their details.
+              Couldn&rsquo;t load the stakeholder list — choose &ldquo;Other&rdquo; and enter their details.
             </p>
           )}
         </FormField>

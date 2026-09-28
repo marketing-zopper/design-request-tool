@@ -148,7 +148,12 @@ export default function ApprovalsPage() {
             </div>
           )}
 
-          <RequestDetailDrawer requestId={selectedId} onClose={() => setSelectedId(null)} onChanged={load} />
+          <RequestDetailDrawer
+            requestId={selectedId}
+            onClose={() => setSelectedId(null)}
+            onChanged={load}
+            allowManageActions={false}
+          />
         </>
       )}
     </PageContainer>
