@@ -3,7 +3,5 @@
 
 insert into stakeholders (name, email, active)
 values
-  ('Aditi Sharma', 'aditi.sharma@example.com', true),
-  ('Rahul Mehta', 'rahul.mehta@example.com', true),
-  ('Priya Nair', 'priya.nair@example.com', true)
+  ('Ketan Patil', 'ketan.patil@zopper.com', true)
 on conflict do nothing;
