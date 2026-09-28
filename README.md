@@ -341,11 +341,3 @@ means here, so a future contributor knows exactly what's open and why.
 - Design requests created before `0006_stakeholder_tokens.sql`, with an "Other" stakeholder,
   aren't linked to a stakeholder row and won't appear in the digest/scoped Approvals view (see
   [Daily Approval Digest](#-daily-approval-digest-email)).
-
-<div align="center">
-
----
-
-Built as a focused, lightweight V1 — not an enterprise platform. 🎯
-
-</div>
