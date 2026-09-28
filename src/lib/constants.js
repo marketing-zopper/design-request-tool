@@ -16,19 +16,7 @@ export const DESIGN_TYPES = [
   'Other',
 ]
 
-export const TEAMS = [
-  'Marketing',
-  'Sales',
-  'Category',
-  'Business Development',
-  'Product',
-  'Operations',
-  'Customer Success',
-  'HR',
-  'Finance',
-  'Leadership',
-  'Other',
-]
+export const TEAMS = ['Marketing', 'Sales', 'HR', 'Other']
 
 // Internal status values, in workflow order.
 export const STATUS = {
