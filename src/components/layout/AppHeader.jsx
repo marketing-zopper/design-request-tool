@@ -3,7 +3,7 @@ import clsx from 'clsx'
 
 const NAV_ITEMS = [
   { label: 'Submit Request', to: '/submit' },
-  { label: 'Manage Requests', to: '/requests', match: ['/requests', '/approvals'] },
+  { label: 'All Requests', to: '/requests', match: ['/requests', '/approvals'] },
 ]
 
 export default function AppHeader() {

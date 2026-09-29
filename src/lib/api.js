@@ -1,4 +1,4 @@
-import { supabase, STORAGE_BUCKET } from './supabase'
+import { supabase } from './supabase'
 import { storagePathFor } from './requestCodes'
 import { uploadFile } from './uploads'
 import { STATUS, APPROVAL_TYPE, APPROVAL_STATUS } from './constants'
@@ -18,6 +18,8 @@ const REQUEST_LIST_SELECT = `
   reference_link,
   additional_notes,
   status,
+  archived,
+  archived_at,
   created_at,
   updated_at,
   request_batches (
@@ -134,6 +136,7 @@ export async function submitDesignRequestBatch({ requester, requirements, onProg
   if (batchError) throw batchError
 
   const createdCodes = []
+  const confirmationItems = []
 
   for (let i = 0; i < requirements.length; i += 1) {
     const req = requirements[i]
@@ -160,6 +163,11 @@ export async function submitDesignRequestBatch({ requester, requirements, onProg
     if (drError) throw drError
 
     createdCodes.push(designRequest.request_code)
+    confirmationItems.push({
+      requestCode: designRequest.request_code,
+      designType: req.designType === 'Other' ? req.customDesignType : req.designType,
+      deadline: req.deadline,
+    })
 
     const filesToUpload = [
       ...(req.referenceFiles || []).map((file) => ({ file, category: 'reference' })),
@@ -192,6 +200,23 @@ export async function submitDesignRequestBatch({ requester, requirements, onProg
   }
 
   onProgress?.({ step: 'done' })
+
+  // Best-effort: a stakeholder should know their request landed, but a
+  // failure to send this email must never fail a submission that already
+  // succeeded in the database.
+  try {
+    await supabase.functions.invoke('send-request-confirmation', {
+      body: {
+        requesterEmail: requester.requesterEmail,
+        stakeholderName: stakeholderNameForApproval,
+        requestCodes: createdCodes,
+        items: confirmationItems,
+      },
+    })
+  } catch {
+    // ignore — see comment above
+  }
+
   return { batchId: batch.id, requestCodes: createdCodes }
 }
 
@@ -238,17 +263,32 @@ export async function updateRequestStatus(id, status) {
 }
 
 /**
- * Deletes a design request entirely: its storage files, then the row itself
- * (attachments/approvals rows cascade via the FK). Irreversible — callers
- * should confirm with the user first.
+ * Archives a design request — a reversible soft-hide from the default All
+ * Requests view (and from pending-approval queries/digests) that replaced
+ * the old hard "Delete" action. The row, its attachments and its approval
+ * history all stay intact until the 60-day retention cleanup removes them
+ * like any other request.
  */
-export async function deleteDesignRequest(requestId, attachmentPaths = []) {
-  if (attachmentPaths.length) {
-    const { error: storageError } = await supabase.storage.from(STORAGE_BUCKET).remove(attachmentPaths)
-    if (storageError) throw storageError
-  }
-  const { error } = await supabase.from('design_requests').delete().eq('id', requestId)
+export async function archiveDesignRequest(id) {
+  const { data, error } = await supabase
+    .from('design_requests')
+    .update({ archived: true, archived_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single()
   if (error) throw error
+  return data
+}
+
+export async function unarchiveDesignRequest(id) {
+  const { data, error } = await supabase
+    .from('design_requests')
+    .update({ archived: false, archived_at: null })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return data
 }
 
 export async function uploadFinalDesign(requestCode, requestId, files) {
@@ -282,6 +322,7 @@ export async function fetchPendingRequirementApprovals() {
     .from('design_requests')
     .select(REQUEST_LIST_SELECT)
     .eq('status', STATUS.PENDING_REQUIREMENT_APPROVAL)
+    .eq('archived', false)
     .order('created_at', { ascending: true })
   if (error) throw error
   return data.map(flattenRequest)
@@ -292,6 +333,7 @@ export async function fetchDesignApprovals() {
     .from('design_requests')
     .select(REQUEST_LIST_SELECT)
     .eq('status', STATUS.READY_FOR_REVIEW)
+    .eq('archived', false)
     .order('created_at', { ascending: true })
   if (error) throw error
   return data.map(flattenRequest)

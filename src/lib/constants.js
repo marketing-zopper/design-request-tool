@@ -18,6 +18,17 @@ export const DESIGN_TYPES = [
 
 export const TEAMS = ['Marketing', 'Sales', 'HR', 'Other']
 
+// Options for the "All Requests" time-range filter — how far back (by
+// created_at) the default list looks. Matches the 60-day retention window:
+// nothing older than that exists to show anyway.
+export const DAYS_FILTER_OPTIONS = [
+  { value: 7, label: 'Last 7 days' },
+  { value: 30, label: 'Last 30 days' },
+  { value: 60, label: 'Last 60 days' },
+]
+
+export const DEFAULT_DAYS_FILTER = 7
+
 // Internal status values, in workflow order.
 export const STATUS = {
   PENDING_REQUIREMENT_APPROVAL: 'pending_requirement_approval',

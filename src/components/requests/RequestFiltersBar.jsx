@@ -1,9 +1,17 @@
 import { Search } from 'lucide-react'
 import SelectField from '../ui/SelectField'
 import { inputBaseClass } from '../ui/FormField'
-import { STATUS_LABELS } from '../../lib/constants'
+import { STATUS_LABELS, DAYS_FILTER_OPTIONS } from '../../lib/constants'
 
-export default function RequestFiltersBar({ search, onSearchChange, filters, onFilterChange, options }) {
+export default function RequestFiltersBar({
+  search,
+  onSearchChange,
+  filters,
+  onFilterChange,
+  options,
+  daysFilter,
+  onDaysFilterChange,
+}) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
       <div className="relative flex-1">
@@ -17,6 +25,19 @@ export default function RequestFiltersBar({ search, onSearchChange, filters, onF
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-shrink-0">
+        <SelectField
+          className="!h-10 sm:w-36"
+          includePlaceholderOption={false}
+          value={daysFilter}
+          onChange={(e) => onDaysFilterChange(Number(e.target.value))}
+        >
+          {DAYS_FILTER_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </SelectField>
+
         <SelectField
           className="!h-10 sm:w-36"
           includePlaceholderOption={false}

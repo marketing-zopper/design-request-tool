@@ -1,10 +1,16 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import AppHeader from './components/layout/AppHeader'
 import BackgroundShapes from './components/layout/BackgroundShapes'
 import SubmitRequestPage from './pages/SubmitRequestPage'
 import AllRequestsPage from './pages/AllRequestsPage'
-import ApprovalsPage from './pages/ApprovalsPage'
+
+// Approvals and All Requests are now one merged page/route. This keeps any
+// already-sent digest emails' /approvals?token=... links working.
+function ApprovalsRedirect() {
+  const location = useLocation()
+  return <Navigate to={`/requests${location.search}`} replace />
+}
 
 export default function App() {
   return (
@@ -15,7 +21,7 @@ export default function App() {
         <Route path="/" element={<Navigate to="/submit" replace />} />
         <Route path="/submit" element={<SubmitRequestPage />} />
         <Route path="/requests" element={<AllRequestsPage />} />
-        <Route path="/approvals" element={<ApprovalsPage />} />
+        <Route path="/approvals" element={<ApprovalsRedirect />} />
         <Route path="*" element={<Navigate to="/submit" replace />} />
       </Routes>
       <Toaster

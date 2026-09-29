@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import toast from 'react-hot-toast'
-import { X, Paperclip, ExternalLink, Trash2 } from 'lucide-react'
+import { X, Paperclip, ExternalLink, Archive, ArchiveRestore } from 'lucide-react'
 import StatusBadge from '../ui/StatusBadge'
 import StatusUpdatePanel from './StatusUpdatePanel'
 import FinalDesignDownloadList from './FinalDesignDownloadList'
 import LoadingState from '../ui/LoadingState'
 import ErrorState from '../ui/ErrorState'
 import ConfirmationModal from '../ui/ConfirmationModal'
-import { fetchRequestById, deleteDesignRequest } from '../../lib/api'
+import { fetchRequestById, archiveDesignRequest, unarchiveDesignRequest } from '../../lib/api'
 import { getErrorMessage } from '../../lib/errors'
 import { formatDate, formatDateTime } from '../../lib/format'
 import { APPROVAL_STATUS } from '../../lib/constants'
@@ -59,8 +59,9 @@ export default function RequestDetailDrawer({ requestId, onClose, onChanged, all
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [deleting, setDeleting] = useState(false)
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false)
+  const [archiving, setArchiving] = useState(false)
+  const [unarchiving, setUnarchiving] = useState(false)
 
   const load = () => {
     if (!requestId) return
@@ -74,7 +75,7 @@ export default function RequestDetailDrawer({ requestId, onClose, onChanged, all
 
   useEffect(() => {
     load()
-    setShowDeleteConfirm(false)
+    setShowArchiveConfirm(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestId])
 
@@ -85,21 +86,32 @@ export default function RequestDetailDrawer({ requestId, onClose, onChanged, all
   const brandAssets = attachments.filter((a) => a.category === 'brand_asset')
   const finalDesigns = attachments.filter((a) => a.category === 'final_design')
 
-  const handleDelete = async () => {
-    setDeleting(true)
+  const handleArchive = async () => {
+    setArchiving(true)
     try {
-      await deleteDesignRequest(
-        detail.id,
-        attachments.map((a) => a.file_path)
-      )
-      toast.success(`${detail.request_code} deleted`)
-      setShowDeleteConfirm(false)
+      await archiveDesignRequest(detail.id)
+      toast.success(`${detail.request_code} archived`)
+      setShowArchiveConfirm(false)
       onChanged?.()
       onClose()
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Could not delete this request'))
+      toast.error(getErrorMessage(err, 'Could not archive this request'))
     } finally {
-      setDeleting(false)
+      setArchiving(false)
+    }
+  }
+
+  const handleUnarchive = async () => {
+    setUnarchiving(true)
+    try {
+      await unarchiveDesignRequest(detail.id)
+      toast.success(`${detail.request_code} restored`)
+      onChanged?.()
+      load()
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Could not restore this request'))
+    } finally {
+      setUnarchiving(false)
     }
   }
 
@@ -114,13 +126,24 @@ export default function RequestDetailDrawer({ requestId, onClose, onChanged, all
           </div>
           <div className="flex items-center gap-1">
             {allowManageActions && detail && (
-              <button
-                onClick={() => setShowDeleteConfirm(true)}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-rose-50 hover:text-rose-500"
-                aria-label="Delete request"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              detail.archived ? (
+                <button
+                  onClick={handleUnarchive}
+                  disabled={unarchiving}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 disabled:opacity-60"
+                  aria-label="Restore request"
+                >
+                  <ArchiveRestore className="h-4 w-4" />
+                </button>
+              ) : (
+                <button
+                  onClick={() => setShowArchiveConfirm(true)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-amber-50 hover:text-amber-600"
+                  aria-label="Archive request"
+                >
+                  <Archive className="h-4 w-4" />
+                </button>
+              )
             )}
             <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100" aria-label="Close">
               <X className="h-4 w-4" />
@@ -240,14 +263,14 @@ export default function RequestDetailDrawer({ requestId, onClose, onChanged, all
       </div>
 
       <ConfirmationModal
-        open={showDeleteConfirm}
-        title={`Delete ${detail?.request_code}?`}
-        description="This permanently removes the request, its attachments and its approval history. This can't be undone."
-        confirmLabel="Delete Request"
+        open={showArchiveConfirm}
+        title={`Archive ${detail?.request_code}?`}
+        description="It'll move to Archived Requests and drop out of the default All Requests view. You can restore it any time."
+        confirmLabel="Archive Request"
         variant="danger"
-        loading={deleting}
-        onConfirm={handleDelete}
-        onCancel={() => setShowDeleteConfirm(false)}
+        loading={archiving}
+        onConfirm={handleArchive}
+        onCancel={() => setShowArchiveConfirm(false)}
       />
     </div>,
     document.body

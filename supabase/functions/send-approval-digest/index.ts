@@ -90,8 +90,8 @@ Deno.serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
 
   const [{ data: requirementRows, error: reqError }, { data: designRows, error: designError }] = await Promise.all([
-    supabase.from('design_requests').select(BATCH_SELECT).eq('status', 'pending_requirement_approval'),
-    supabase.from('design_requests').select(BATCH_SELECT).eq('status', 'ready_for_review'),
+    supabase.from('design_requests').select(BATCH_SELECT).eq('status', 'pending_requirement_approval').eq('archived', false),
+    supabase.from('design_requests').select(BATCH_SELECT).eq('status', 'ready_for_review').eq('archived', false),
   ])
   if (reqError) return new Response(JSON.stringify({ error: reqError.message }), { status: 500 })
   if (designError) return new Response(JSON.stringify({ error: designError.message }), { status: 500 })
@@ -110,7 +110,7 @@ Deno.serve(async (req) => {
 
   const results = []
   for (const { stakeholder, requirement, design } of byStakeholder.values()) {
-    const approveLink = `${SITE_URL}/approvals?token=${stakeholder.access_token}`
+    const approveLink = `${SITE_URL}/requests?token=${stakeholder.access_token}`
     const html = renderDigestHtml(stakeholder.name, requirement, design, approveLink)
     const total = requirement.length + design.length
 
