@@ -69,6 +69,7 @@ export async function fetchStakeholders() {
     .from('stakeholders')
     .select('id, name, email')
     .eq('active', true)
+    .eq('is_listed', true)
     .order('name', { ascending: true })
   if (error) throw error
   return data
@@ -78,7 +79,11 @@ export async function fetchStakeholders() {
  * Finds a stakeholder by email (case-insensitive) or creates one. Used when a
  * requester picks "Other" and types a name/email, so that person also ends up
  * with a real stakeholder row — and therefore an access_token — and starts
- * receiving the daily approval digest like any listed stakeholder.
+ * receiving the daily approval digest like any listed stakeholder. Created
+ * with `is_listed: false` — they can still approve/receive digests like any
+ * other stakeholder, but only the deliberately curated list should ever
+ * appear in the requester's dropdown, so this one-off pick never becomes a
+ * permanent dropdown option.
  */
 async function findOrCreateStakeholder(name, email) {
   // Escape SQL LIKE wildcards (_ and %) — emails routinely contain underscores,
@@ -95,7 +100,7 @@ async function findOrCreateStakeholder(name, email) {
 
   const { data: created, error: insertError } = await supabase
     .from('stakeholders')
-    .insert({ name, email })
+    .insert({ name, email, is_listed: false })
     .select('id, name, email')
     .single()
   if (insertError) throw insertError
