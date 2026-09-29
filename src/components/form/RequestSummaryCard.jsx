@@ -45,11 +45,15 @@ export function ReviewRequestCard({ requirement, index, onEdit }) {
         </Button>
       </div>
       <dl className="mt-2 grid grid-cols-2 gap-y-1 text-[13px] font-body text-slate-500 sm:grid-cols-3">
-        <p>{requirement.quantity} units</p>
-        {requirement.dimensions && <p>{requirement.dimensions}</p>}
-        <p>Required: {formatShortDate(requirement.deadline)}</p>
-        <p>Co-branding: {requirement.coBranding ? 'Yes' : 'No'}</p>
-        {attachmentCount > 0 && <p>{attachmentCount} attachment{attachmentCount > 1 ? 's' : ''}</p>}
+        <p>Units : {requirement.quantity}</p>
+        {requirement.dimensions && <p>Size : {requirement.dimensions}</p>}
+        <p>Required By : {formatShortDate(requirement.deadline)}</p>
+        <p>Co-branding : {requirement.coBranding ? 'Yes' : 'No'}</p>
+        {attachmentCount > 0 && (
+          <p>
+            Attachments : {attachmentCount} file{attachmentCount > 1 ? 's' : ''}
+          </p>
+        )}
       </dl>
     </div>
   )
