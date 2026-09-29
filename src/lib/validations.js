@@ -32,7 +32,7 @@ export const requesterSchema = z
 
 export const designRequirementSchema = z
   .object({
-    designType: z.string().min(1, 'Select a design type'),
+    designType: z.string().trim().min(1, 'Select or type a design type'),
     customDesignType: z.string().trim().optional().or(z.literal('')),
     quantity: z.coerce.number().int().min(1, 'Quantity must be at least 1'),
     deadline: z.string().min(1, 'Select a required-by date'),
@@ -49,13 +49,6 @@ export const designRequirementSchema = z
     additionalNotes: z.string().trim().optional().or(z.literal('')),
   })
   .superRefine((data, ctx) => {
-    if (data.designType === 'Other' && (!data.customDesignType || data.customDesignType.trim().length < 2)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['customDesignType'],
-        message: 'Describe the design type',
-      })
-    }
     if (data.coBranding && (!data.partnerName || data.partnerName.trim().length < 2)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

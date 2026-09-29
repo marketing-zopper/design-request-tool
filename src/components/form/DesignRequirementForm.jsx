@@ -2,12 +2,14 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import clsx from 'clsx'
 import FormField, { inputBaseClass } from '../ui/FormField'
-import SelectField from '../ui/SelectField'
+import ComboField from '../ui/ComboField'
 import TextareaField from '../ui/TextareaField'
 import Button from '../ui/Button'
 import FileUploader from './FileUploader'
 import { designRequirementSchema } from '../../lib/validations'
 import { DESIGN_TYPES } from '../../lib/constants'
+
+const PRESET_DESIGN_TYPES = DESIGN_TYPES.filter((type) => type !== 'Other')
 
 export default function DesignRequirementForm({
   requirement,
@@ -29,8 +31,7 @@ export default function DesignRequirementForm({
   } = useForm({
     resolver: zodResolver(designRequirementSchema),
     defaultValues: {
-      designType: requirement.designType,
-      customDesignType: requirement.customDesignType,
+      designType: requirement.designType === 'Other' ? requirement.customDesignType : requirement.designType,
       quantity: requirement.quantity || 1,
       deadline: requirement.deadline,
       dimensions: requirement.dimensions,
@@ -42,11 +43,15 @@ export default function DesignRequirementForm({
     },
   })
 
-  const designType = watch('designType')
   const coBranding = watch('coBranding')
 
   const submit = handleSubmit((values) => {
-    onSave(values)
+    const isPreset = PRESET_DESIGN_TYPES.includes(values.designType)
+    onSave({
+      ...values,
+      designType: isPreset ? values.designType : 'Other',
+      customDesignType: isPreset ? '' : values.designType,
+    })
   })
 
   return (
@@ -59,20 +64,12 @@ export default function DesignRequirementForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <FormField label="Design Type" required error={errors.designType?.message}>
-          <SelectField placeholder="Select design type" {...register('designType')}>
-            {DESIGN_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </SelectField>
+          <ComboField
+            placeholder="Select or type a design type"
+            options={PRESET_DESIGN_TYPES}
+            {...register('designType')}
+          />
         </FormField>
-
-        {designType === 'Other' && (
-          <FormField label="Describe the design type" required error={errors.customDesignType?.message}>
-            <input className={inputBaseClass} placeholder="e.g. Retail shelf wobbler" {...register('customDesignType')} />
-          </FormField>
-        )}
 
         <FormField label="Quantity" required error={errors.quantity?.message}>
           <input type="number" min={1} className={inputBaseClass} {...register('quantity')} />
