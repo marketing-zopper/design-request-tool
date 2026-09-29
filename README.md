@@ -38,11 +38,12 @@ final designs — no login required.
 | | |
 |---|---|
 | 📝 **Structured submission** | Multi-step form, multiple design requirements per batch, file uploads for references, brand assets, and content briefs |
-| 📋 **Request management** | Searchable/filterable table, a detail drawer, status transitions, and delete — gated to the marketing team |
-| ✅ **Stakeholder approvals** | Requirement approval → design approval → completed, each with comments, all reachable via a personal magic link (no login) |
-| 📬 **Daily digest email** | One batched email per stakeholder per day — never one email per request |
-| ⬇️ **Reliable downloads** | Final designs download as real files (forced `Content-Disposition`), in both Manage Requests and Approvals |
-| 🔒 **Layered soft-gating** | `/requests` behind a team allowlist + password, `/approvals` behind a per-stakeholder token — see [Security Model](#-security-model--no-auth-tradeoffs) |
+| 📋 **All Requests** | One merged page — searchable/filterable table, a detail drawer, archive/restore (no hard delete), a 7/30/60-day display range — gated to the marketing team, who see everything |
+| ✅ **Stakeholder approvals** | Requirement approval → design approval, each with comments, all reachable via a personal magic link (no login) — a stakeholder only ever sees requests naming them |
+| 📬 **Daily digest + confirmation emails** | One batched approval-digest email per stakeholder per day (never per request), plus an immediate confirmation email to the requester on submission |
+| ⬇️ **Reliable downloads** | Final designs download as real files (forced `Content-Disposition`) |
+| 🗓️ **60-day retention** | Requests older than 60 days (and their files) are purged automatically by a scheduled cleanup job |
+| 🔒 **Layered soft-gating** | `/requests` behind a team allowlist + password for team members, or a per-stakeholder token for magic-link access — see [Security Model](#-security-model--no-auth-tradeoffs) |
 
 ---
 
@@ -87,6 +88,10 @@ Open the Supabase **SQL Editor** and run each file in `supabase/migrations/`, **
 | `0007_daily_digest_cron.sql` | Schedules the daily digest — **read [Daily Approval Digest](#-daily-approval-digest-email) first**, it needs a secret created manually before this one |
 | `0008_stakeholders_update.sql` | Lets a stakeholder be deactivated (`active = false`) |
 | `0009_requester_name_optional.sql` | Drops `NOT NULL` on `request_batches.requester_name` (field no longer collected) |
+| `0010_archive_and_retention.sql` | Adds `archived`/`archived_at`, drops the anon delete policies — archive replaces hard delete |
+| `0011_retention_cleanup_cron.sql` | Schedules the daily 60-day retention cleanup (reuses `0007`'s Vault secret) |
+| `0012_digest_time_1525ist.sql` | Moves the daily digest send time to 15:25 IST (09:55 UTC) |
+| `0013_collapse_statuses.sql` | Collapses the 7 workflow statuses down to 3: Awaited Approval / Approved / Rejected |
 
 > 💡 With the Supabase CLI linked to the project, `supabase db push` applies all of these for
 > you — except `0007`, which still needs the manual Vault secret step first.
@@ -116,28 +121,31 @@ Open the printed local URL — `/` redirects to `/submit`.
 
 ## 🔄 How It Works
 
+Only 3 statuses exist: **Awaited Approval**, **Approved**, **Rejected**. `Awaited Approval` covers
+both "waiting on the initial requirement approval" and "waiting on the final-design approval" —
+and `Approved` covers both "requirement approved, design team still needs to upload" and "fully
+done." What a given status actually means for one request is inferred from whether a final design
+has been uploaded yet (`hasFinalDesign`), not from a separate status value — see `StatusUpdatePanel`
+and `hasFinalDesignAttachment` in `src/lib/api.js`.
+
 ```mermaid
 flowchart LR
-    A([Submitted]) --> B{Stakeholder<br/>reviews}
-    B -->|Approve| C([Approved])
+    A([Submitted:<br/>Awaited Approval]) --> B{Stakeholder<br/>reviews requirement}
     B -->|Reject| X([Rejected])
-    C --> D([In Design])
-    D --> E([Ready for<br/>Review])
-    E --> F{Stakeholder<br/>reviews design}
-    F -->|Approve Final| G([Completed])
-    F -->|Request Changes| H([Changes<br/>Requested])
-    H --> D
+    B -->|Approve| C([Approved:<br/>team uploads design])
+    C --> D([Awaited Approval:<br/>stakeholder reviews design])
+    D -->|Approve Final| E([Approved: done])
+    D -->|Request Changes| Y([Rejected:<br/>team re-uploads]) --> C
 ```
 
-1. **Anyone** submits a request at `/submit` — one or more design requirements in a single batch. Fully open, no restriction.
-2. It appears in **Manage Requests → All Requests** (`/requests`) with status *Awaiting Approval* — also open to everyone.
-3. Once a day, every stakeholder with at least one pending item gets **one** email listing all of them, with an **Approve Now** button linking to `/approvals?token=...`, scoped to just that stakeholder. See [Daily Approval Digest](#-daily-approval-digest-email) and [Security Model](#-security-model--no-auth-tradeoffs) for how that works without a login.
-4. The stakeholder approves the requirement → status **Approved**.
-5. The design team moves it to **In Design**.
-6. The design team uploads the final design and marks it **Ready for Review**.
-7. The stakeholder sees it in their next digest, under Approvals → Design Approvals, and either:
-   - ✅ **Approves Final** → status **Completed**, or
-   - 🔁 **Requests Changes** → status **Changes Requested** → back to **In Design**, repeating from step 6 with a new version.
+1. **Anyone** submits a request at `/submit` — one or more design requirements in a single batch. Fully open, no restriction. The requester gets an immediate confirmation email.
+2. It appears in **All Requests** (`/requests`) with status **Awaited Approval** — the marketing team, logged in, sees and manages every request here.
+3. Once a day, every stakeholder with at least one pending item gets **one** email listing all of them, with an **Approve Now** link into their scoped view of `/requests?token=...`. See [Daily Approval Digest](#-daily-approval-digest-email) and [Security Model](#-security-model--no-auth-tradeoffs) for how that works without a login.
+4. The stakeholder approves the requirement → status **Approved**. Rejecting instead → status **Rejected** (terminal — no design work follows).
+5. The design team uploads the final design (while still **Approved**) and clicks **Submit for Stakeholder Review** → status flips back to **Awaited Approval**.
+6. The stakeholder sees it in their next digest, under Design Approvals, and either:
+   - ✅ **Approves Final** → status **Approved** (done — downloadable from All Requests), or
+   - 🔁 **Requests Changes** → status **Rejected** → the design team re-uploads and resubmits, repeating from step 5.
 
 ---
 
@@ -146,25 +154,28 @@ flowchart LR
 ```text
 src/
   components/
-    layout/      AppHeader, PageContainer, ManageRequestsTabs, BackgroundShapes
+    layout/      AppHeader, PageContainer, BackgroundShapes
     form/        Submit-request steps — requester details, requirement form/list,
                  file uploader, review cards, success screen
-    requests/    All Requests table/filters, detail drawer, design-team status panel,
-                 TeamLoginGate (the /requests allowlist+password gate)
-    approvals/   Requirement & design approval cards
+    requests/    All Requests table/filters, detail drawer (archive/restore, status
+                 panel), TeamLoginGate (the /requests allowlist+password gate)
+    approvals/   Requirement, design & completed approval cards (stakeholder view)
     ui/          Button, FormField, SelectField, StatusBadge, EmptyState,
                  LoadingState, ErrorState, ConfirmationModal, Stepper
-  pages/         SubmitRequestPage, AllRequestsPage, ApprovalsPage
+  pages/         SubmitRequestPage, AllRequestsPage (both team and stakeholder
+                 views live here — /approvals redirects into this one route)
   lib/           supabase client, constants, zod validations, request-code
                  helpers, upload helpers, api.js (all Supabase queries/mutations),
                  teamAccess.js (the /requests allowlist + shared password)
   hooks/         useStakeholders, useDraftForm (session-persisted submit form),
-                 useStakeholderAccess (token-gated Approvals access),
+                 useStakeholderAccess (token-gated scoped access),
                  useTeamAccess (allowlist+password gate for All Requests)
 supabase/
   migrations/    SQL migrations described above
   functions/
-    send-approval-digest/   Edge Function — the once-daily batched approval email
+    send-approval-digest/        Edge Function — the once-daily batched approval email
+    send-request-confirmation/   Edge Function — immediate email to the requester on submit
+    cleanup-old-requests/        Edge Function — daily 60-day retention purge
 ```
 
 > All data access goes through `src/lib/api.js` — there's no other place in the app that talks
@@ -195,14 +206,15 @@ DR-1021/
 ## 📧 Daily Approval Digest (email)
 
 Requirement and design approvals aren't emailed one at a time. Once a day, a Supabase Edge
-Function collects every pending approval, groups it by stakeholder, and sends **one** email per
-stakeholder (not per request) with an **Approve Now** button that deep-links into their scoped
-`/approvals` view.
+Function collects every pending approval (status `awaited_approval`), groups it by stakeholder,
+and sends **one** email per stakeholder (not per request) with an **Approve Now** button that
+deep-links into their scoped `/requests` view.
 
 ### How the link works without a login
 
 Each stakeholder row has an `access_token` (added in `0006_stakeholder_tokens.sql`). The email's
-button links to `/approvals?token=<their token>`. Opening that link resolves the token — via the
+button links to `/requests?token=<their token>` (`/approvals?token=...` still works too — it just
+redirects there). Opening that link resolves the token — via the
 `resolve_stakeholder_by_token` Postgres function, the *only* way the token can ever be read back
 (a plain `select * from stakeholders` cannot see it; see the migration for why) — and scopes the
 page to that person's approvals. Whoever holds the link is trusted as that stakeholder; there's
@@ -247,9 +259,10 @@ stakeholder.
    select vault.create_secret('<the exact same random string from step 2>', 'digest_invoke_secret');
    ```
 
-4. **Run `0007_daily_digest_cron.sql`** — schedules a 9:00 UTC daily job that calls the function
-   using the Vault secret from step 3. Adjust the cron expression in that file first if 9:00 UTC
-   doesn't suit your stakeholders' timezone.
+4. **Run `0007_daily_digest_cron.sql`, then `0012_digest_time_1525ist.sql`** — schedules a daily
+   job (currently 15:25 IST / 09:55 UTC) that calls the function using the Vault secret from step
+   3. Adjust the cron expression in `0012` (or `cron.alter_job` directly) if that time doesn't suit
+   your stakeholders' timezone.
 
 5. **Test it anytime**, without waiting for the schedule:
 
@@ -282,9 +295,9 @@ that only allow the operations the app actually performs:
 |---|:---:|:---:|:---:|:---:|---|
 | `stakeholders` | ✅ | ✅ | ✅ | ❌ | Select excludes `access_token` (column-level grant); insert lets "Other" upsert a stakeholder; update is for deactivating (`active = false`) rather than deleting |
 | `request_batches` | ✅ | ✅ | ❌ | ❌ | Created once at submission, never touched again |
-| `design_requests` | ✅ | ✅ | ✅ | ✅ | Delete added in `0005` — the design team can remove a request entirely |
-| `attachments` | ✅ | ✅ | ❌ | ✅ | Delete only cascades from a request delete; a new version is a new row |
-| `approvals` | ✅ | ✅ | ✅ | ✅ | Delete cascades the same way as attachments |
+| `design_requests` | ✅ | ✅ | ✅ | ❌ | No delete from the app (`0010` dropped it) — "Delete" was replaced with **Archive** (`archived`/`archived_at`, a plain update). Only the scheduled `cleanup-old-requests` job (service role, bypasses RLS) ever removes a row, once it's 60+ days old |
+| `attachments` | ✅ | ✅ | ❌ | ❌ | Same as above — only the retention cleanup job deletes rows |
+| `approvals` | ✅ | ✅ | ✅ | ❌ | Same as above |
 
 The `design-assets` storage bucket is public, with an insert policy scoped to that bucket only;
 reads are served via Supabase's public-bucket CDN path.
@@ -295,23 +308,24 @@ reads are served via Supabase's public-bucket CDN path.
 > row**. That's an acceptable trade-off for an internal tool used by a small trusted team, but it
 > is **not** a substitute for real authorization.
 
-### Two screens have an extra gate on top of this
+### One screen, two gates on top of this
 
-Everything else (`/submit`) stays fully open.
+Everything else (`/submit`) stays fully open. `/requests` is a single merged route — which of the
+two gates below applies depends on how you arrive:
 
-- **`/requests` (All Requests)** — restricted to the marketing team: a fixed allowlist of 5
-  emails plus one shared password (see `src/lib/teamAccess.js`). Whoever logs in stays logged in
+- **No token in the URL** — treated as the marketing team's view: a fixed allowlist of 5 emails
+  plus one shared password (see `src/lib/teamAccess.js`). Whoever logs in stays logged in
   (in `localStorage`) until they hit "Log out". This is a soft barrier, nothing more — the email
   list and password both ship in the JS bundle, the check runs entirely in React, and the anon
   key underneath still has full read/write on every table regardless of whether someone's
   "logged in". It stops a random visitor from stumbling into the request-management UI; it does
   not stop someone who reads the bundle from bypassing it entirely.
-- **`/approvals`** — only shows content to someone holding a stakeholder's personal
-  `?token=...` link (delivered privately by the daily digest email). This is *link possession*,
-  not authentication — there's no password, and no check that the person clicking the link is
-  really that stakeholder.
+- **`?token=...` in the URL** (or remembered in `sessionStorage` from an earlier visit) — shows
+  only that stakeholder's own requests instead, per their personal magic link (delivered privately
+  by the daily digest email). This is *link possession*, not authentication — there's no password,
+  and no check that the person clicking the link is really that stakeholder.
 
-Both checks stop casual/accidental access (you can't just browse to either page and see
+Both checks stop casual/accidental access (you can't just browse to `/requests` and see
 everything, unlike a truly open no-auth screen), but neither stops a determined user with the
 anon key from bypassing the UI and calling the same REST endpoints directly. Real authorization
 still requires Supabase Auth.
@@ -321,8 +335,8 @@ still requires Supabase Auth.
 1. Add a `user_id`/`role` concept (e.g. a `profiles` table keyed by `auth.uid()`).
 2. Tighten the `design_requests`/`approvals` update policies to require `auth.uid()` to match the
    assigned stakeholder or a "design team" role, instead of the current `using (true)` — this is
-   where the token-based `/approvals` gating should move from "checked in React" to "enforced by
-   Postgres".
+   where the token-based stakeholder gating on `/requests` should move from "checked in React" to
+   "enforced by Postgres".
 3. Consider moving multi-step writes (submission, approvals) into Postgres functions
    (`security definer`) or Edge Functions so the anon key is never trusted with raw table writes
    at all.
@@ -334,10 +348,14 @@ means here, so a future contributor knows exactly what's open and why.
 
 ## ⚠️ Known Limitations (by design, for V1)
 
-- No authentication, roles, or permissions — `/requests` has an allowlist+password gate and
-  `/approvals` has link-based gating (see [Security Model](#-security-model--no-auth-tradeoffs)); `/submit` is fully open.
+- No authentication, roles, or permissions — `/requests` has an allowlist+password gate for the
+  team and link-based (magic-link token) gating for stakeholders (see
+  [Security Model](#-security-model--no-auth-tradeoffs)); `/submit` is fully open.
 - Submission isn't atomic across tables/storage (see [Storage Layout](#-storage-layout)).
 - No kanban, task assignment, or analytics — out of scope per the V1 brief.
 - Design requests created before `0006_stakeholder_tokens.sql`, with an "Other" stakeholder,
-  aren't linked to a stakeholder row and won't appear in the digest/scoped Approvals view (see
+  aren't linked to a stakeholder row and won't appear in the digest/scoped requests view (see
   [Daily Approval Digest](#-daily-approval-digest-email)).
+- Only 3 statuses (Awaited Approval / Approved / Rejected) — the design team's kanban-style
+  view of "who still needs to upload" vs. "fully done" relies on reading `hasFinalDesign`
+  alongside the status badge, not the badge alone (see [How It Works](#-how-it-works)).

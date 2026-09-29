@@ -27,7 +27,7 @@ export default function DesignApprovalCard({ request, latestDesign, onView, onRe
     setSubmitting(true)
     try {
       await approveFinalDesign(request.id, stakeholderName, comment)
-      toast.success(`${request.request_code} marked Completed`)
+      toast.success(`${request.request_code} approved`)
       onResolved()
     } catch (err) {
       toast.error(getErrorMessage(err, 'Could not approve this design'))

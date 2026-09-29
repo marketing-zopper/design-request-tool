@@ -25,12 +25,21 @@ const DIGEST_INVOKE_SECRET = Deno.env.get('DIGEST_INVOKE_SECRET')!
 
 const BATCH_SELECT = `
   id, request_code, design_type, custom_design_type, quantity, deadline,
+  attachments ( category ),
   request_batches (
     requester_email,
     stakeholder_id,
     stakeholders ( id, name, email, access_token )
   )
 `
+
+// design_requests only has 3 statuses now (Awaited Approval / Approved /
+// Rejected) — AWAITED_APPROVAL covers both a first-time requirement approval
+// and a final-design approval, so this is how the digest tells them apart
+// (mirrors hasFinalDesign in src/lib/api.js).
+function hasFinalDesign(row: any) {
+  return (row.attachments || []).some((a: any) => a.category === 'final_design')
+}
 
 function designTypeLabel(row: any) {
   return row.design_type === 'Other' ? row.custom_design_type || 'Other' : row.design_type
@@ -89,12 +98,12 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
 
-  const [{ data: requirementRows, error: reqError }, { data: designRows, error: designError }] = await Promise.all([
-    supabase.from('design_requests').select(BATCH_SELECT).eq('status', 'pending_requirement_approval').eq('archived', false),
-    supabase.from('design_requests').select(BATCH_SELECT).eq('status', 'ready_for_review').eq('archived', false),
-  ])
-  if (reqError) return new Response(JSON.stringify({ error: reqError.message }), { status: 500 })
-  if (designError) return new Response(JSON.stringify({ error: designError.message }), { status: 500 })
+  const { data: awaitedRows, error: awaitedError } = await supabase
+    .from('design_requests')
+    .select(BATCH_SELECT)
+    .eq('status', 'awaited_approval')
+    .eq('archived', false)
+  if (awaitedError) return new Response(JSON.stringify({ error: awaitedError.message }), { status: 500 })
 
   const byStakeholder = new Map<string, { stakeholder: any; requirement: any[]; design: any[] }>()
   const addRow = (row: any, kind: 'requirement' | 'design') => {
@@ -105,8 +114,7 @@ Deno.serve(async (req) => {
     }
     byStakeholder.get(stakeholder.id)![kind].push(row)
   }
-  ;(requirementRows ?? []).forEach((r) => addRow(r, 'requirement'))
-  ;(designRows ?? []).forEach((r) => addRow(r, 'design'))
+  ;(awaitedRows ?? []).forEach((r) => addRow(r, hasFinalDesign(r) ? 'design' : 'requirement'))
 
   const results = []
   for (const { stakeholder, requirement, design } of byStakeholder.values()) {

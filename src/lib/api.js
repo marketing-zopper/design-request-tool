@@ -22,6 +22,7 @@ const REQUEST_LIST_SELECT = `
   archived_at,
   created_at,
   updated_at,
+  attachments ( category ),
   request_batches (
     requester_email,
     team,
@@ -31,6 +32,19 @@ const REQUEST_LIST_SELECT = `
     stakeholders ( id, name, email )
   )
 `
+
+/**
+ * With only 3 top-level statuses (Awaited Approval / Approved / Rejected),
+ * whether a request is waiting on its first requirement approval vs. a
+ * final-design approval — and whether "Approved" means "done" vs. "team
+ * still needs to upload" — is inferred from whether a final_design
+ * attachment exists yet, rather than from status itself. See
+ * StatusUpdatePanel and the digest Edge Function for the two other places
+ * that lean on this same flag.
+ */
+function hasFinalDesignAttachment(row) {
+  return (row.attachments || []).some((a) => a.category === 'final_design')
+}
 
 function flattenRequest(row) {
   const batch = row.request_batches
@@ -43,6 +57,7 @@ function flattenRequest(row) {
     stakeholderName,
     stakeholderEmail,
     stakeholderId: batch?.stakeholder_id ?? null,
+    hasFinalDesign: hasFinalDesignAttachment(row),
   }
 }
 
@@ -156,7 +171,7 @@ export async function submitDesignRequestBatch({ requester, requirements, onProg
         content_requirement: req.contentRequirement,
         reference_link: req.referenceLink || null,
         additional_notes: req.additionalNotes || null,
-        status: STATUS.PENDING_REQUIREMENT_APPROVAL,
+        status: STATUS.AWAITED_APPROVAL,
       })
       .select()
       .single()
@@ -317,22 +332,17 @@ export async function uploadFinalDesign(requestCode, requestId, files) {
 // ---------------------------------------------------------------------------
 // Approvals
 // ---------------------------------------------------------------------------
-export async function fetchPendingRequirementApprovals() {
+/**
+ * All requests currently awaiting a stakeholder decision — both a first-time
+ * requirement approval and a final-design approval share the AWAITED_APPROVAL
+ * status, so callers split the result themselves via `.hasFinalDesign`
+ * (false = requirement approval, true = design approval).
+ */
+export async function fetchAwaitedApprovals() {
   const { data, error } = await supabase
     .from('design_requests')
     .select(REQUEST_LIST_SELECT)
-    .eq('status', STATUS.PENDING_REQUIREMENT_APPROVAL)
-    .eq('archived', false)
-    .order('created_at', { ascending: true })
-  if (error) throw error
-  return data.map(flattenRequest)
-}
-
-export async function fetchDesignApprovals() {
-  const { data, error } = await supabase
-    .from('design_requests')
-    .select(REQUEST_LIST_SELECT)
-    .eq('status', STATUS.READY_FOR_REVIEW)
+    .eq('status', STATUS.AWAITED_APPROVAL)
     .eq('archived', false)
     .order('created_at', { ascending: true })
   if (error) throw error
@@ -342,16 +352,18 @@ export async function fetchDesignApprovals() {
 /**
  * Requests whose final design has been approved. Shown on the Approvals page
  * so a stakeholder can come back and re-download a design after approving it
- * — otherwise it just disappears from their view once approved.
+ * — otherwise it just disappears from their view once approved. APPROVED
+ * also covers "requirement approved, team hasn't uploaded yet" — hasFinalDesign
+ * is what narrows this down to genuinely finished requests.
  */
 export async function fetchCompletedApprovals() {
   const { data, error } = await supabase
     .from('design_requests')
     .select(REQUEST_LIST_SELECT)
-    .eq('status', STATUS.COMPLETED)
+    .eq('status', STATUS.APPROVED)
     .order('updated_at', { ascending: false })
   if (error) throw error
-  return data.map(flattenRequest)
+  return data.map(flattenRequest).filter((r) => r.hasFinalDesign)
 }
 
 export async function fetchFinalDesignAttachments(requestIds) {
@@ -431,7 +443,7 @@ export async function approveFinalDesign(requestId, stakeholderName, comment) {
     stakeholderName,
     comment,
   })
-  return updateRequestStatus(requestId, STATUS.COMPLETED)
+  return updateRequestStatus(requestId, STATUS.APPROVED)
 }
 
 export async function requestDesignChanges(requestId, stakeholderName, comment) {
@@ -442,5 +454,5 @@ export async function requestDesignChanges(requestId, stakeholderName, comment) 
     stakeholderName,
     comment,
   })
-  return updateRequestStatus(requestId, STATUS.CHANGES_REQUESTED)
+  return updateRequestStatus(requestId, STATUS.REJECTED)
 }

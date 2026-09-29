@@ -13,8 +13,7 @@ import LoadingState from '../components/ui/LoadingState'
 import ErrorState from '../components/ui/ErrorState'
 import {
   fetchAllRequests,
-  fetchPendingRequirementApprovals,
-  fetchDesignApprovals,
+  fetchAwaitedApprovals,
   fetchCompletedApprovals,
   fetchFinalDesignAttachments,
 } from '../lib/api'
@@ -51,13 +50,15 @@ function StakeholderView({ stakeholder, loading: resolvingAccess, error: accessE
   const load = () => {
     setLoading(true)
     setError(null)
-    Promise.all([fetchPendingRequirementApprovals(), fetchDesignApprovals(), fetchCompletedApprovals()])
-      .then(async ([reqApprovals, designApprovalsList, completedList]) => {
-        setRequirementApprovals(reqApprovals)
-        setDesignApprovals(designApprovalsList)
+    Promise.all([fetchAwaitedApprovals(), fetchCompletedApprovals()])
+      .then(async ([awaitedList, completedList]) => {
+        // AWAITED_APPROVAL covers both a first-time requirement approval and
+        // a final-design approval — hasFinalDesign is what tells them apart.
+        setRequirementApprovals(awaitedList.filter((r) => !r.hasFinalDesign))
+        setDesignApprovals(awaitedList.filter((r) => r.hasFinalDesign))
         setCompletedApprovals(completedList)
         const attachmentsByRequest = await fetchFinalDesignAttachments([
-          ...designApprovalsList.map((r) => r.id),
+          ...awaitedList.filter((r) => r.hasFinalDesign).map((r) => r.id),
           ...completedList.map((r) => r.id),
         ])
         setFinalDesignsByRequest(attachmentsByRequest)

@@ -29,35 +29,27 @@ export const DAYS_FILTER_OPTIONS = [
 
 export const DEFAULT_DAYS_FILTER = 7
 
-// Internal status values, in workflow order.
+// Internal status values. Only 3 — whether a request needs a first-time
+// design upload, is fully done, or needs a revision after a rejection is no
+// longer its own status; it's inferred from whether a final_design
+// attachment/approval exists yet (see hasFinalDesign in src/lib/api.js and
+// StatusUpdatePanel).
 export const STATUS = {
-  PENDING_REQUIREMENT_APPROVAL: 'pending_requirement_approval',
+  AWAITED_APPROVAL: 'awaited_approval',
   APPROVED: 'approved',
-  IN_DESIGN: 'in_design',
-  READY_FOR_REVIEW: 'ready_for_review',
-  CHANGES_REQUESTED: 'changes_requested',
-  COMPLETED: 'completed',
   REJECTED: 'rejected',
 }
 
 export const STATUS_LABELS = {
-  [STATUS.PENDING_REQUIREMENT_APPROVAL]: 'Awaiting Approval',
+  [STATUS.AWAITED_APPROVAL]: 'Awaited Approval',
   [STATUS.APPROVED]: 'Approved',
-  [STATUS.IN_DESIGN]: 'In Design',
-  [STATUS.READY_FOR_REVIEW]: 'Ready for Review',
-  [STATUS.CHANGES_REQUESTED]: 'Changes Requested',
-  [STATUS.COMPLETED]: 'Completed',
   [STATUS.REJECTED]: 'Rejected',
 }
 
 // Tailwind-safe class groups per status pill.
 export const STATUS_STYLES = {
-  [STATUS.PENDING_REQUIREMENT_APPROVAL]: 'bg-amber-50 text-amber-700 border-amber-200',
-  [STATUS.APPROVED]: 'bg-sky-50 text-sky-700 border-sky-200',
-  [STATUS.IN_DESIGN]: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-  [STATUS.READY_FOR_REVIEW]: 'bg-violet-50 text-violet-700 border-violet-200',
-  [STATUS.CHANGES_REQUESTED]: 'bg-orange-50 text-orange-700 border-orange-200',
-  [STATUS.COMPLETED]: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  [STATUS.AWAITED_APPROVAL]: 'bg-amber-50 text-amber-700 border-amber-200',
+  [STATUS.APPROVED]: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   [STATUS.REJECTED]: 'bg-rose-50 text-rose-700 border-rose-200',
 }
 
