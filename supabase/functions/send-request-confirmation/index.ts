@@ -8,9 +8,19 @@
 // functions) since this is called from the browser with the anon key.
 // RESEND_API_KEY and DIGEST_FROM_EMAIL are the same secrets already set for
 // send-approval-digest — no extra `supabase secrets set` needed.
+//
+// Unlike the two cron-only functions (server-to-server, no browser
+// involved), this one is called directly from the browser via
+// supabase.functions.invoke — so it needs CORS headers on every response,
+// including an explicit answer to the browser's OPTIONS preflight.
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!
 const DIGEST_FROM_EMAIL = Deno.env.get('DIGEST_FROM_EMAIL')!
+
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
 
 function formatDate(value: string | null) {
   if (!value) return '—'
@@ -55,10 +65,17 @@ function renderHtml(stakeholderName: string, items: any[]) {
 }
 
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: CORS_HEADERS })
+  }
+
   try {
     const { requesterEmail, stakeholderName, requestCodes, items } = await req.json()
     if (!requesterEmail || !Array.isArray(requestCodes) || requestCodes.length === 0) {
-      return new Response(JSON.stringify({ error: 'Missing requesterEmail or requestCodes' }), { status: 400 })
+      return new Response(JSON.stringify({ error: 'Missing requesterEmail or requestCodes' }), {
+        status: 400,
+        headers: CORS_HEADERS,
+      })
     }
 
     const rows = Array.isArray(items) && items.length ? items : requestCodes.map((c: string) => ({ requestCode: c }))
@@ -76,9 +93,9 @@ Deno.serve(async (req) => {
     })
 
     return new Response(JSON.stringify({ ok: res.ok, status: res.status }), {
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     })
   } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500 })
+    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: CORS_HEADERS })
   }
 })
