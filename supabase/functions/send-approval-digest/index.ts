@@ -29,7 +29,7 @@ const BATCH_SELECT = `
   request_batches (
     requester_email,
     stakeholder_id,
-    stakeholders ( id, name, email, access_token )
+    stakeholders ( id, name, email, access_token, active )
   )
 `
 
@@ -108,7 +108,10 @@ Deno.serve(async (req) => {
   const byStakeholder = new Map<string, { stakeholder: any; requirement: any[]; design: any[] }>()
   const addRow = (row: any, kind: 'requirement' | 'design') => {
     const stakeholder = row.request_batches?.stakeholders
-    if (!stakeholder?.email) return
+    // A deactivated stakeholder's magic link can never resolve (see
+    // resolve_stakeholder_by_token, which requires active = true) — sending
+    // them a digest anyway would be a dead-end email with a broken button.
+    if (!stakeholder?.email || !stakeholder.active) return
     if (!byStakeholder.has(stakeholder.id)) {
       byStakeholder.set(stakeholder.id, { stakeholder, requirement: [], design: [] })
     }
