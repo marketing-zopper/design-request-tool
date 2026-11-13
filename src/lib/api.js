@@ -75,37 +75,10 @@ export async function fetchStakeholders() {
   return data
 }
 
-/**
- * Finds a stakeholder by email (case-insensitive) or creates one. Used when a
- * requester picks "Other" and types a name/email, so that person also ends up
- * with a real stakeholder row — and therefore an access_token — and starts
- * receiving the daily approval digest like any listed stakeholder. Created
- * with `is_listed: false` — they can still approve/receive digests like any
- * other stakeholder, but only the deliberately curated list should ever
- * appear in the requester's dropdown, so this one-off pick never becomes a
- * permanent dropdown option.
- */
-async function findOrCreateStakeholder(name, email) {
-  // Escape SQL LIKE wildcards (_ and %) — emails routinely contain underscores,
-  // which `ilike` would otherwise treat as "match any single character" and
-  // could match the wrong stakeholder (or multiple, throwing via maybeSingle()).
-  const escapedEmail = email.replace(/[%_\\]/g, '\\$&')
-  const { data: existing, error: findError } = await supabase
-    .from('stakeholders')
-    .select('id, name, email')
-    .ilike('email', escapedEmail)
-    .maybeSingle()
-  if (findError) throw findError
-  if (existing) return existing
-
-  const { data: created, error: insertError } = await supabase
-    .from('stakeholders')
-    .insert({ name, email, is_listed: false })
-    .select('id, name, email')
-    .single()
-  if (insertError) throw insertError
-  return created
-}
+// findOrCreateStakeholder (for the submit form's "Other" stakeholder pick)
+// now lives server-side in supabase/functions/employee-actions/index.ts —
+// submission as a whole moved there (see submitDesignRequestBatch below) so
+// it can be role-checked before it runs.
 
 /**
  * Resolves a stakeholder's magic-link token into their identity without ever
@@ -123,135 +96,86 @@ export async function resolveStakeholderByToken(token) {
 // ---------------------------------------------------------------------------
 
 /**
- * Creates one request_batch and one design_request per requirement, uploads
- * each requirement's files to storage (named after the freshly-generated
- * request code), and records the attachment + initial approval rows.
- *
- * Not wrapped in a DB transaction (the anon REST client can't span one across
- * multiple tables/storage calls) — acceptable for an internal V1 tool. See
- * README "Known limitations" for the atomicity trade-off and how an Edge
- * Function/RPC could close the gap later.
+ * Uploads each requirement's files to Storage directly from the browser
+ * (unchanged — Storage access is gated by its own policies, see 0017), then
+ * hands the metadata + all requirement fields to the employee-actions Edge
+ * Function, which does the actual multi-table insert with the service-role
+ * key after verifying the caller is a signed-in Editor/Admin/Super Admin.
+ * Submission now requires that login — this is an intentional behavior
+ * change (see Phase 3 plan): /submit is no longer anonymous-writable.
  */
 export async function submitDesignRequestBatch({ requester, requirements, onProgress }) {
-  let stakeholderId = requester.stakeholderId
-  let stakeholderNameForApproval = requester.stakeholderName
-
-  if (requester.stakeholderId === 'other') {
-    const stakeholder = await findOrCreateStakeholder(requester.customStakeholderName, requester.customStakeholderEmail)
-    stakeholderId = stakeholder.id
-    stakeholderNameForApproval = stakeholder.name
-  }
-
-  const { data: batch, error: batchError } = await supabase
-    .from('request_batches')
-    .insert({
-      requester_email: requester.requesterEmail,
-      team: requester.team,
-      stakeholder_id: stakeholderId,
-      custom_stakeholder_name: requester.stakeholderId === 'other' ? requester.customStakeholderName : null,
-      custom_stakeholder_email: requester.stakeholderId === 'other' ? requester.customStakeholderEmail : null,
-    })
-    .select()
-    .single()
-  if (batchError) throw batchError
-
-  const createdCodes = []
-  const confirmationItems = []
+  const requirementsPayload = []
 
   for (let i = 0; i < requirements.length; i += 1) {
     const req = requirements[i]
     onProgress?.({ step: 'saving', index: i, total: requirements.length })
-
-    const { data: designRequest, error: drError } = await supabase
-      .from('design_requests')
-      .insert({
-        batch_id: batch.id,
-        design_type: req.designType,
-        custom_design_type: req.designType === 'Other' ? req.customDesignType : null,
-        quantity: req.quantity,
-        deadline: req.deadline,
-        dimensions: req.dimensions || null,
-        co_branding: !!req.coBranding,
-        partner_name: req.coBranding ? req.partnerName : null,
-        content_requirement: req.contentRequirement,
-        reference_link: req.referenceLink || null,
-        additional_notes: req.additionalNotes || null,
-        status: STATUS.AWAITED_APPROVAL,
-      })
-      .select()
-      .single()
-    if (drError) throw drError
-
-    createdCodes.push(designRequest.request_code)
-    confirmationItems.push({
-      requestCode: designRequest.request_code,
-      designType: req.designType === 'Other' ? req.customDesignType : req.designType,
-      deadline: req.deadline,
-    })
 
     const filesToUpload = [
       ...(req.referenceFiles || []).map((file) => ({ file, category: 'reference' })),
       ...(req.brandAssetFiles || []).map((file) => ({ file, category: 'brand_asset' })),
     ]
 
+    // Files are named after the request code once it exists server-side, so
+    // a temporary, still-unique path is used here instead — the attachment
+    // row stores whatever path/url the file actually landed at.
+    const tempCode = `pending-${Date.now()}-${i}`
+    const attachments = []
     for (let f = 0; f < filesToUpload.length; f += 1) {
       const { file, category } = filesToUpload[f]
       onProgress?.({ step: 'uploading', index: i, total: requirements.length, fileIndex: f, fileTotal: filesToUpload.length })
-      const path = storagePathFor(designRequest.request_code, category, file.name)
+      const path = storagePathFor(tempCode, category, file.name)
       const { publicUrl } = await uploadFile(file, path)
-      const { error: attachError } = await supabase.from('attachments').insert({
-        request_id: designRequest.id,
-        file_name: file.name,
-        file_path: path,
-        file_url: publicUrl,
-        file_type: file.type,
-        category,
-      })
-      if (attachError) throw attachError
+      attachments.push({ file_name: file.name, file_path: path, file_url: publicUrl, file_type: file.type, category })
     }
 
-    const { error: approvalError } = await supabase.from('approvals').insert({
-      request_id: designRequest.id,
-      approval_type: APPROVAL_TYPE.REQUIREMENT,
-      status: APPROVAL_STATUS.PENDING,
-      stakeholder_name: stakeholderNameForApproval,
+    requirementsPayload.push({
+      designType: req.designType,
+      customDesignType: req.designType === 'Other' ? req.customDesignType : null,
+      quantity: req.quantity,
+      deadline: req.deadline,
+      dimensions: req.dimensions || null,
+      coBranding: !!req.coBranding,
+      partnerName: req.coBranding ? req.partnerName : null,
+      contentRequirement: req.contentRequirement,
+      referenceLink: req.referenceLink || null,
+      additionalNotes: req.additionalNotes || null,
+      attachments,
     })
-    if (approvalError) throw approvalError
   }
+
+  const { data, error } = await supabase.functions.invoke('employee-actions', {
+    body: { action: 'submit_request', requester, requirements: requirementsPayload },
+  })
+  if (error) throw error
 
   onProgress?.({ step: 'done' })
-
-  // Best-effort: a stakeholder should know their request landed, but a
-  // failure to send this email must never fail a submission that already
-  // succeeded in the database.
-  try {
-    await supabase.functions.invoke('send-request-confirmation', {
-      body: {
-        requesterEmail: requester.requesterEmail,
-        stakeholderName: stakeholderNameForApproval,
-        requestCodes: createdCodes,
-        items: confirmationItems,
-      },
-    })
-  } catch {
-    // ignore — see comment above
-  }
-
-  return { batchId: batch.id, requestCodes: createdCodes }
+  return data
 }
 
 // ---------------------------------------------------------------------------
-// All Requests
+// All Requests — employee (Editor/Admin/Super Admin) side, via
+// employee-actions. See fetchRequestById below for the stakeholder's own
+// direct-Postgres equivalent.
 // ---------------------------------------------------------------------------
 export async function fetchAllRequests() {
-  const { data, error } = await supabase
-    .from('design_requests')
-    .select(REQUEST_LIST_SELECT)
-    .order('created_at', { ascending: false })
+  const { data, error } = await supabase.functions.invoke('employee-actions', { body: { action: 'list_requests' } })
   if (error) throw error
-  return data.map(flattenRequest)
+  return data
 }
 
+export async function fetchRequestByIdForTeam(id) {
+  const { data, error } = await supabase.functions.invoke('employee-actions', { body: { action: 'get_request', id } })
+  if (error) throw error
+  return data
+}
+
+/**
+ * Direct-Postgres read, scoped by RLS (see 0017) to only the rows where the
+ * caller's Google-verified email matches the invited stakeholder — used by
+ * StakeholderView, never TeamView (which uses fetchRequestByIdForTeam
+ * above, enforced via employee-actions instead).
+ */
 export async function fetchRequestById(id) {
   const { data, error } = await supabase
     .from('design_requests')
@@ -271,13 +195,9 @@ export async function fetchRequestById(id) {
   return { ...flattenRequest(data), attachments, approvals }
 }
 
+/** Employee-only (e.g. a manual status override) — not currently exposed in the UI. */
 export async function updateRequestStatus(id, status) {
-  const { data, error } = await supabase
-    .from('design_requests')
-    .update({ status })
-    .eq('id', id)
-    .select()
-    .single()
+  const { data, error } = await supabase.functions.invoke('employee-actions', { body: { action: 'update_status', id, status } })
   if (error) throw error
   return data
 }
@@ -287,51 +207,33 @@ export async function updateRequestStatus(id, status) {
  * Requests view (and from pending-approval queries/digests) that replaced
  * the old hard "Delete" action. The row, its attachments and its approval
  * history all stay intact until the 60-day retention cleanup removes them
- * like any other request.
+ * like any other request. Admin/Super Admin only — enforced in
+ * employee-actions, not just hidden in the UI.
  */
 export async function archiveDesignRequest(id) {
-  const { data, error } = await supabase
-    .from('design_requests')
-    .update({ archived: true, archived_at: new Date().toISOString() })
-    .eq('id', id)
-    .select()
-    .single()
+  const { data, error } = await supabase.functions.invoke('employee-actions', { body: { action: 'archive', id } })
   if (error) throw error
   return data
 }
 
 export async function unarchiveDesignRequest(id) {
-  const { data, error } = await supabase
-    .from('design_requests')
-    .update({ archived: false, archived_at: null })
-    .eq('id', id)
-    .select()
-    .single()
+  const { data, error } = await supabase.functions.invoke('employee-actions', { body: { action: 'unarchive', id } })
   if (error) throw error
   return data
 }
 
 export async function uploadFinalDesign(requestCode, requestId, files) {
-  const uploaded = []
+  const uploadedFiles = []
   for (const file of files) {
     const path = storagePathFor(requestCode, 'final_design', file.name)
     const { publicUrl } = await uploadFile(file, path)
-    const { data, error } = await supabase
-      .from('attachments')
-      .insert({
-        request_id: requestId,
-        file_name: file.name,
-        file_path: path,
-        file_url: publicUrl,
-        file_type: file.type,
-        category: 'final_design',
-      })
-      .select()
-      .single()
-    if (error) throw error
-    uploaded.push(data)
+    uploadedFiles.push({ file_name: file.name, file_path: path, file_url: publicUrl, file_type: file.type })
   }
-  return uploaded
+  const { data, error } = await supabase.functions.invoke('employee-actions', {
+    body: { action: 'upload_final_design', requestId, files: uploadedFiles },
+  })
+  if (error) throw error
+  return data
 }
 
 // ---------------------------------------------------------------------------
@@ -387,77 +289,57 @@ export async function fetchFinalDesignAttachments(requestIds) {
   }, {})
 }
 
-async function recordApproval({ requestId, approvalType, status, stakeholderName, comment }) {
-  const { data: existing, error: findError } = await supabase
-    .from('approvals')
-    .select('id')
-    .eq('request_id', requestId)
-    .eq('approval_type', approvalType)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  if (findError) throw findError
-
-  const payload = {
-    status,
-    stakeholder_name: stakeholderName,
-    comment: comment || null,
-    approved_at: status === APPROVAL_STATUS.APPROVED ? new Date().toISOString() : null,
-  }
-
-  if (existing) {
-    const { error } = await supabase.from('approvals').update(payload).eq('id', existing.id)
-    if (error) throw error
-  } else {
-    const { error } = await supabase.from('approvals').insert({
-      request_id: requestId,
-      approval_type: approvalType,
-      ...payload,
-    })
-    if (error) throw error
-  }
+/**
+ * Records a stakeholder's decision via record_stakeholder_approval() (see
+ * 0018_stakeholder_approval_rpc.sql) — a SECURITY DEFINER function that
+ * independently re-checks the caller's Google-verified email against the
+ * invited stakeholder for this request before writing anything. The
+ * magic-link token that got the stakeholder here is never consulted for
+ * this check; a mismatch throws 'email_mismatch', which the approval card
+ * components catch and render as EmailMismatchNotice.
+ */
+async function recordStakeholderApproval({ requestId, approvalType, decision, comment }) {
+  const { error } = await supabase.rpc('record_stakeholder_approval', {
+    p_request_id: requestId,
+    p_approval_type: approvalType,
+    p_decision: decision,
+    p_comment: comment || null,
+  })
+  if (error) throw error
 }
 
-export async function approveRequirement(requestId, stakeholderName, comment) {
-  await recordApproval({
+export async function approveRequirement(requestId, _stakeholderName, comment) {
+  return recordStakeholderApproval({
     requestId,
     approvalType: APPROVAL_TYPE.REQUIREMENT,
-    status: APPROVAL_STATUS.APPROVED,
-    stakeholderName,
+    decision: APPROVAL_STATUS.APPROVED,
     comment,
   })
-  return updateRequestStatus(requestId, STATUS.APPROVED)
 }
 
-export async function rejectRequirement(requestId, stakeholderName, comment) {
-  await recordApproval({
+export async function rejectRequirement(requestId, _stakeholderName, comment) {
+  return recordStakeholderApproval({
     requestId,
     approvalType: APPROVAL_TYPE.REQUIREMENT,
-    status: APPROVAL_STATUS.REJECTED,
-    stakeholderName,
+    decision: APPROVAL_STATUS.REJECTED,
     comment,
   })
-  return updateRequestStatus(requestId, STATUS.REJECTED)
 }
 
-export async function approveFinalDesign(requestId, stakeholderName, comment) {
-  await recordApproval({
+export async function approveFinalDesign(requestId, _stakeholderName, comment) {
+  return recordStakeholderApproval({
     requestId,
     approvalType: APPROVAL_TYPE.FINAL_DESIGN,
-    status: APPROVAL_STATUS.APPROVED,
-    stakeholderName,
+    decision: APPROVAL_STATUS.APPROVED,
     comment,
   })
-  return updateRequestStatus(requestId, STATUS.APPROVED)
 }
 
-export async function requestDesignChanges(requestId, stakeholderName, comment) {
-  await recordApproval({
+export async function requestDesignChanges(requestId, _stakeholderName, comment) {
+  return recordStakeholderApproval({
     requestId,
     approvalType: APPROVAL_TYPE.FINAL_DESIGN,
-    status: APPROVAL_STATUS.CHANGES_REQUESTED,
-    stakeholderName,
+    decision: APPROVAL_STATUS.CHANGES_REQUESTED,
     comment,
   })
-  return updateRequestStatus(requestId, STATUS.REJECTED)
 }

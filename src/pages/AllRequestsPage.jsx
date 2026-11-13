@@ -4,7 +4,8 @@ import PageContainer from '../components/layout/PageContainer'
 import RequestFiltersBar from '../components/requests/RequestFiltersBar'
 import RequestTable from '../components/requests/RequestTable'
 import RequestDetailDrawer from '../components/requests/RequestDetailDrawer'
-import TeamLoginGate from '../components/requests/TeamLoginGate'
+import RequireEmployeeAccess from '../components/auth/RequireEmployeeAccess'
+import GoogleSignInGate from '../components/auth/GoogleSignInGate'
 import RequirementApprovalCard from '../components/approvals/RequirementApprovalCard'
 import DesignApprovalCard from '../components/approvals/DesignApprovalCard'
 import CompletedRequestCard from '../components/approvals/CompletedRequestCard'
@@ -13,21 +14,23 @@ import LoadingState from '../components/ui/LoadingState'
 import ErrorState from '../components/ui/ErrorState'
 import {
   fetchAllRequests,
+  fetchRequestByIdForTeam,
   fetchAwaitedApprovals,
   fetchCompletedApprovals,
   fetchFinalDesignAttachments,
 } from '../lib/api'
-import { useTeamAccess } from '../hooks/useTeamAccess'
+import { useAuth } from '../hooks/useAuth'
 import { useStakeholderAccess } from '../hooks/useStakeholderAccess'
 import { DEFAULT_DAYS_FILTER } from '../lib/constants'
 
 const EMPTY_FILTERS = { status: '', team: '', stakeholder: '', designType: '' }
 
 /**
- * A stakeholder's magic-link token (see useStakeholderAccess) and a
- * marketing-team login (see useTeamAccess) both land on this one route —
- * there's no separate "Approvals" page/tab anymore. Whichever mode applies
- * decides what's rendered below; the two never overlap for one visit.
+ * A stakeholder's magic-link token (see useStakeholderAccess) and the
+ * internal team's Google sign-in (see RequireEmployeeAccess) both land on
+ * this one route — there's no separate "Approvals" page/tab anymore.
+ * Whichever mode applies decides what's rendered below; the two never
+ * overlap for one visit.
  */
 export default function AllRequestsPage() {
   const stakeholderAccess = useStakeholderAccess()
@@ -39,6 +42,7 @@ export default function AllRequestsPage() {
 }
 
 function StakeholderView({ stakeholder, loading: resolvingAccess, error: accessError }) {
+  const { session, loading: authLoading } = useAuth()
   const [requirementApprovals, setRequirementApprovals] = useState([])
   const [designApprovals, setDesignApprovals] = useState([])
   const [completedApprovals, setCompletedApprovals] = useState([])
@@ -67,10 +71,13 @@ function StakeholderView({ stakeholder, loading: resolvingAccess, error: accessE
       .finally(() => setLoading(false))
   }
 
+  // Reads are now RLS-scoped to the signed-in Google account's email (see
+  // 0017_auth_rbac.sql) — nothing to load until both the token has resolved
+  // a stakeholder AND there's a real session.
   useEffect(() => {
-    if (stakeholder) load()
+    if (stakeholder && session) load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stakeholder?.id])
+  }, [stakeholder?.id, session?.user?.id])
 
   // A stakeholder only ever sees requests naming them — never anyone else's.
   const scopedRequirementApprovals = requirementApprovals.filter((r) => r.stakeholderId === stakeholder?.id)
@@ -109,10 +116,23 @@ function StakeholderView({ stakeholder, loading: resolvingAccess, error: accessE
             Showing requests for <span className="font-medium text-brand-dark">{stakeholder.name}</span>.
           </p>
 
-          {loading && <LoadingState rows={4} label="Loading requests..." />}
-          {error && <ErrorState description="Couldn't load requests." onRetry={load} />}
+          {authLoading && <LoadingState rows={3} label="Checking your sign-in..." />}
 
-          {!loading && !error && (
+          {!authLoading && !session && (
+            <div className="mt-4">
+              <GoogleSignInGate
+                title="Sign in with Google to continue"
+                description={`Sign in with the Google account that received this invite${
+                  stakeholder.email ? ` (${stakeholder.email})` : ''
+                }.`}
+              />
+            </div>
+          )}
+
+          {!authLoading && session && loading && <LoadingState rows={4} label="Loading requests..." />}
+          {!authLoading && session && error && <ErrorState description="Couldn't load requests." onRetry={load} />}
+
+          {!authLoading && session && !loading && !error && (
             <div className="mt-4 flex flex-col gap-8">
               {nothingPending && scopedCompletedApprovals.length === 0 && (
                 <EmptyState title="No requests yet." description="Requests naming you as stakeholder will show up here." />
@@ -171,12 +191,14 @@ function StakeholderView({ stakeholder, loading: resolvingAccess, error: accessE
             </div>
           )}
 
-          <RequestDetailDrawer
-            requestId={selectedId}
-            onClose={() => setSelectedId(null)}
-            onChanged={load}
-            allowManageActions={false}
-          />
+          {session && (
+            <RequestDetailDrawer
+              requestId={selectedId}
+              onClose={() => setSelectedId(null)}
+              onChanged={load}
+              allowManageActions={false}
+            />
+          )}
         </>
       )}
     </PageContainer>
@@ -184,7 +206,15 @@ function StakeholderView({ stakeholder, loading: resolvingAccess, error: accessE
 }
 
 function TeamView() {
-  const { member, isAuthenticated, login, logout } = useTeamAccess()
+  return (
+    <RequireEmployeeAccess>
+      <TeamRequestsPanel />
+    </RequireEmployeeAccess>
+  )
+}
+
+function TeamRequestsPanel() {
+  const { email, signOut } = useAuth()
 
   const [requests, setRequests] = useState([])
   const [loading, setLoading] = useState(true)
@@ -205,9 +235,9 @@ function TeamView() {
   }
 
   useEffect(() => {
-    if (isAuthenticated) load()
+    load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated])
+  }, [])
 
   const activeRequests = useMemo(() => requests.filter((r) => !r.archived), [requests])
   const archivedRequests = useMemo(() => requests.filter((r) => r.archived), [requests])
@@ -246,23 +276,16 @@ function TeamView() {
           <h1 className="font-heading text-[28px] font-bold text-brand-dark sm:text-[32px]">All Requests</h1>
           <p className="mt-1 font-body text-sm text-slate-500">Track, manage and archive all incoming design requests.</p>
         </div>
-        {isAuthenticated && (
-          <p className="pt-1 text-[13px] font-body text-slate-400">
-            Signed in as <span className="font-medium text-slate-600">{member.name}</span> ·{' '}
-            <button onClick={logout} className="text-brand-light hover:underline">
-              Log out
-            </button>
-          </p>
-        )}
+        <p className="pt-1 text-[13px] font-body text-slate-400">
+          Signed in as <span className="font-medium text-slate-600">{email}</span> ·{' '}
+          <button onClick={signOut} className="text-brand-light hover:underline">
+            Sign out
+          </button>
+        </p>
       </div>
 
-      {!isAuthenticated ? (
-        <div className="mt-6">
-          <TeamLoginGate onLogin={login} />
-        </div>
-      ) : (
-        <div className="mt-6 flex flex-col gap-5">
-          <RequestFiltersBar
+      <div className="mt-6 flex flex-col gap-5">
+        <RequestFiltersBar
             search={search}
             onSearchChange={setSearch}
             filters={filters}
@@ -311,9 +334,13 @@ function TeamView() {
             </div>
           )}
 
-          <RequestDetailDrawer requestId={selectedId} onClose={() => setSelectedId(null)} onChanged={load} />
-        </div>
-      )}
+        <RequestDetailDrawer
+          requestId={selectedId}
+          onClose={() => setSelectedId(null)}
+          onChanged={load}
+          fetchFn={fetchRequestByIdForTeam}
+        />
+      </div>
     </PageContainer>
   )
 }

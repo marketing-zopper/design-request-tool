@@ -4,6 +4,7 @@ import AppHeader from './components/layout/AppHeader'
 import BackgroundShapes from './components/layout/BackgroundShapes'
 import SubmitRequestPage from './pages/SubmitRequestPage'
 import AllRequestsPage from './pages/AllRequestsPage'
+import RequireEmployeeAccess from './components/auth/RequireEmployeeAccess'
 
 // Approvals and All Requests are now one merged page/route. This keeps any
 // already-sent digest emails' /approvals?token=... links working.
@@ -19,7 +20,14 @@ export default function App() {
       <AppHeader />
       <Routes>
         <Route path="/" element={<Navigate to="/submit" replace />} />
-        <Route path="/submit" element={<SubmitRequestPage />} />
+        <Route
+          path="/submit"
+          element={
+            <RequireEmployeeAccess>
+              <SubmitRequestPage />
+            </RequireEmployeeAccess>
+          }
+        />
         <Route path="/requests" element={<AllRequestsPage />} />
         <Route path="/approvals" element={<ApprovalsRedirect />} />
         <Route path="*" element={<Navigate to="/submit" replace />} />

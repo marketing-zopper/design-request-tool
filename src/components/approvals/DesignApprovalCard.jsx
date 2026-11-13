@@ -4,9 +4,11 @@ import { Eye, FileImage } from 'lucide-react'
 import ApprovalCard from './ApprovalCard'
 import Button from '../ui/Button'
 import TextareaField from '../ui/TextareaField'
+import EmailMismatchNotice from './EmailMismatchNotice'
 import { formatDate } from '../../lib/format'
 import { approveFinalDesign, requestDesignChanges } from '../../lib/api'
 import { getErrorMessage } from '../../lib/errors'
+import { useAuth } from '../../hooks/useAuth'
 
 function designTypeLabel(r) {
   return r.design_type === 'Other' ? r.custom_design_type || 'Other' : r.design_type
@@ -16,10 +18,16 @@ function isImage(file) {
   return file?.file_type?.startsWith('image/')
 }
 
+function isEmailMismatch(err) {
+  return String(err?.message || '').includes('email_mismatch')
+}
+
 export default function DesignApprovalCard({ request, latestDesign, onView, onResolved }) {
+  const { email: currentEmail } = useAuth()
   const [comment, setComment] = useState('')
   const [showComment, setShowComment] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [mismatch, setMismatch] = useState(false)
 
   const stakeholderName = request.stakeholderName
 
@@ -30,7 +38,8 @@ export default function DesignApprovalCard({ request, latestDesign, onView, onRe
       toast.success(`${request.request_code} approved`)
       onResolved()
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Could not approve this design'))
+      if (isEmailMismatch(err)) setMismatch(true)
+      else toast.error(getErrorMessage(err, 'Could not approve this design'))
     } finally {
       setSubmitting(false)
     }
@@ -43,7 +52,8 @@ export default function DesignApprovalCard({ request, latestDesign, onView, onRe
       toast.success(`Changes requested on ${request.request_code}`)
       onResolved()
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Could not request changes'))
+      if (isEmailMismatch(err)) setMismatch(true)
+      else toast.error(getErrorMessage(err, 'Could not request changes'))
     } finally {
       setSubmitting(false)
     }
@@ -76,6 +86,9 @@ export default function DesignApprovalCard({ request, latestDesign, onView, onRe
       }
       footer={
         <>
+          {mismatch && (
+            <EmailMismatchNotice invitedEmail={request.stakeholderEmail} currentEmail={currentEmail} />
+          )}
           {showComment && (
             <TextareaField
               rows={2}

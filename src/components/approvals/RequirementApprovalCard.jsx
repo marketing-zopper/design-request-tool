@@ -4,18 +4,26 @@ import { Eye } from 'lucide-react'
 import ApprovalCard from './ApprovalCard'
 import Button from '../ui/Button'
 import TextareaField from '../ui/TextareaField'
+import EmailMismatchNotice from './EmailMismatchNotice'
 import { formatDate } from '../../lib/format'
 import { approveRequirement, rejectRequirement } from '../../lib/api'
 import { getErrorMessage } from '../../lib/errors'
+import { useAuth } from '../../hooks/useAuth'
 
 function designTypeLabel(r) {
   return r.design_type === 'Other' ? r.custom_design_type || 'Other' : r.design_type
 }
 
+function isEmailMismatch(err) {
+  return String(err?.message || '').includes('email_mismatch')
+}
+
 export default function RequirementApprovalCard({ request, onView, onResolved }) {
+  const { email: currentEmail } = useAuth()
   const [comment, setComment] = useState('')
   const [showComment, setShowComment] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [mismatch, setMismatch] = useState(false)
 
   const stakeholderName = request.stakeholderName
 
@@ -26,7 +34,8 @@ export default function RequirementApprovalCard({ request, onView, onResolved })
       toast.success(`${request.request_code} approved`)
       onResolved()
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Could not approve this request'))
+      if (isEmailMismatch(err)) setMismatch(true)
+      else toast.error(getErrorMessage(err, 'Could not approve this request'))
     } finally {
       setSubmitting(false)
     }
@@ -44,7 +53,8 @@ export default function RequirementApprovalCard({ request, onView, onResolved })
       toast.success(`${request.request_code} rejected`)
       onResolved()
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Could not reject this request'))
+      if (isEmailMismatch(err)) setMismatch(true)
+      else toast.error(getErrorMessage(err, 'Could not reject this request'))
     } finally {
       setSubmitting(false)
     }
@@ -82,6 +92,9 @@ export default function RequirementApprovalCard({ request, onView, onResolved })
       }
       footer={
         <>
+          {mismatch && (
+            <EmailMismatchNotice invitedEmail={request.stakeholderEmail} currentEmail={currentEmail} />
+          )}
           {showComment && (
             <TextareaField
               rows={2}

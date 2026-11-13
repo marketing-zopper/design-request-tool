@@ -12,6 +12,7 @@ import { fetchRequestById, archiveDesignRequest, unarchiveDesignRequest } from '
 import { getErrorMessage } from '../../lib/errors'
 import { formatDate, formatDateTime } from '../../lib/format'
 import { APPROVAL_STATUS } from '../../lib/constants'
+import { useRole } from '../../hooks/useRole'
 
 function DetailRow({ label, children }) {
   if (children === null || children === undefined || children === '') return null
@@ -55,7 +56,14 @@ const APPROVAL_STATUS_TEXT = {
   [APPROVAL_STATUS.CHANGES_REQUESTED]: 'Changes Requested',
 }
 
-export default function RequestDetailDrawer({ requestId, onClose, onChanged, allowManageActions = true }) {
+export default function RequestDetailDrawer({
+  requestId,
+  onClose,
+  onChanged,
+  allowManageActions = true,
+  fetchFn = fetchRequestById,
+}) {
+  const { canArchive } = useRole()
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -63,11 +71,13 @@ export default function RequestDetailDrawer({ requestId, onClose, onChanged, all
   const [archiving, setArchiving] = useState(false)
   const [unarchiving, setUnarchiving] = useState(false)
 
+  const canShowArchiveActions = allowManageActions && canArchive
+
   const load = () => {
     if (!requestId) return
     setLoading(true)
     setError(null)
-    fetchRequestById(requestId)
+    fetchFn(requestId)
       .then(setDetail)
       .catch(setError)
       .finally(() => setLoading(false))
@@ -125,7 +135,7 @@ export default function RequestDetailDrawer({ requestId, onClose, onChanged, all
             {detail && <StatusBadge status={detail.status} />}
           </div>
           <div className="flex items-center gap-1">
-            {allowManageActions && detail && (
+            {canShowArchiveActions && detail && (
               detail.archived ? (
                 <button
                   onClick={handleUnarchive}
