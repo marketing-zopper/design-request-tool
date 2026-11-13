@@ -13,15 +13,20 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { resolveRole } from '../_shared/resolveRole.ts'
+import { CORS_HEADERS } from '../_shared/cors.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: CORS_HEADERS })
+  }
+
   const authHeader = req.headers.get('Authorization') || ''
   const accessToken = authHeader.replace(/^Bearer\s+/i, '')
   if (!accessToken) {
-    return new Response(JSON.stringify({ error: 'not_authenticated' }), { status: 401 })
+    return new Response(JSON.stringify({ error: 'not_authenticated' }), { status: 401, headers: CORS_HEADERS })
   }
 
   // A service-role client's auth.getUser(token) verifies ANY access token
@@ -34,12 +39,12 @@ Deno.serve(async (req) => {
     error: userError,
   } = await supabase.auth.getUser(accessToken)
   if (userError || !user?.email) {
-    return new Response(JSON.stringify({ error: 'not_authenticated' }), { status: 401 })
+    return new Response(JSON.stringify({ error: 'not_authenticated' }), { status: 401, headers: CORS_HEADERS })
   }
 
   const resolution = await resolveRole(user.email)
 
   return new Response(JSON.stringify(resolution), {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
   })
 })

@@ -21,6 +21,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { resolveRole, hasAnyAccess, canArchive } from '../_shared/resolveRole.ts'
 import { flattenRequest, REQUEST_LIST_SELECT } from '../_shared/flatten.ts'
+import { CORS_HEADERS } from '../_shared/cors.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -29,7 +30,7 @@ const STATUS = { AWAITED_APPROVAL: 'awaited_approval', APPROVED: 'approved', REJ
 const VALID_STATUSES = new Set(Object.values(STATUS))
 
 function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
+  return new Response(JSON.stringify(body), { status, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
 }
 
 /** Mirrors findOrCreateStakeholder in src/lib/api.js, using the service-role client. */
@@ -69,6 +70,10 @@ async function sendConfirmationEmail(payload: Record<string, unknown>) {
 }
 
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: CORS_HEADERS })
+  }
+
   const authHeader = req.headers.get('Authorization') || ''
   const accessToken = authHeader.replace(/^Bearer\s+/i, '')
   if (!accessToken) return json({ error: 'not_authenticated' }, 401)
