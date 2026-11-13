@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { LogIn } from 'lucide-react'
 import Button from '../ui/Button'
 import { useAuth } from '../../hooks/useAuth'
@@ -14,9 +14,20 @@ function GoogleGlyph() {
   )
 }
 
-export default function GoogleSignInGate({ title = 'Sign in to continue', description }) {
+/**
+ * Auto-fires the Google redirect on mount instead of waiting for a click —
+ * someone arriving via Master App (or anyone with an active Google browser
+ * session) should only see a near-instant bounce through Google and back,
+ * never an extra "click here" step. Someone with no active Google session
+ * (e.g. opening the tool's URL directly, cold) still lands on Google's own
+ * login screen, which is the only point sign-in is genuinely required. The
+ * button stays as a manual fallback/retry — e.g. if a browser setting
+ * blocks the automatic redirect, or the previous attempt errored out.
+ */
+export default function GoogleSignInGate({ title = 'Sign in to continue', description, autoRedirect = true }) {
   const { signInWithGoogle } = useAuth()
-  const [submitting, setSubmitting] = useState(false)
+  const [submitting, setSubmitting] = useState(autoRedirect)
+  const firedRef = useRef(false)
 
   const handleSignIn = async () => {
     setSubmitting(true)
@@ -24,14 +35,23 @@ export default function GoogleSignInGate({ title = 'Sign in to continue', descri
     // No need to reset `submitting` — a successful call navigates away to Google.
   }
 
+  useEffect(() => {
+    if (!autoRedirect || firedRef.current) return
+    firedRef.current = true
+    handleSignIn()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   return (
     <div className="mx-auto mt-4 max-w-sm rounded-xl2 border border-slate-200/80 bg-white p-6 shadow-card sm:p-8">
       <div className="flex flex-col items-center gap-2 text-center">
         <div className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-dark/5">
           <LogIn className="h-5 w-5 text-brand-dark/60" />
         </div>
-        <h2 className="font-heading text-lg font-semibold text-slate-800">{title}</h2>
-        {description && <p className="text-sm font-body text-slate-500">{description}</p>}
+        <h2 className="font-heading text-lg font-semibold text-slate-800">
+          {submitting ? 'Redirecting to Google…' : title}
+        </h2>
+        {!submitting && description && <p className="text-sm font-body text-slate-500">{description}</p>}
       </div>
 
       <Button

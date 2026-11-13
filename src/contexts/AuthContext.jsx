@@ -29,7 +29,7 @@ export function AuthProvider({ children }) {
     user: session?.user ?? null,
     email: session?.user?.email ?? null,
     loading,
-    signInWithGoogle: (redirectTo) => signInWithGoogle(redirectTo || window.location.href),
+    signInWithGoogle: (redirectTo, options) => signInWithGoogle(redirectTo || window.location.href, options),
     signOut,
   }
 

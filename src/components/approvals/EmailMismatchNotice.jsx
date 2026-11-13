@@ -13,7 +13,10 @@ export default function EmailMismatchNotice({ invitedEmail, currentEmail }) {
 
   const handleSwitch = async () => {
     await signOut()
-    await signInWithGoogle()
+    // Force the account picker here — this is the one place a silent,
+    // same-session re-auth would be wrong, since the whole point is to let
+    // the person pick a *different* Google account.
+    await signInWithGoogle(undefined, { prompt: 'select_account' })
   }
 
   return (
